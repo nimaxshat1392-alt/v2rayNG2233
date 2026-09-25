@@ -18,9 +18,12 @@ jobs:
         run: |
           BASE="$GITHUB_WORKSPACE/V2rayNG/app/src/main"
           JAVA="$BASE/java/com/v2ray/ang"
-          mkdir -p "$JAVA/ui/admin" "$JAVA/ui/dashboard" "$JAVA/ui/components" "$JAVA/ui/settings" "$JAVA/handler"
+          mkdir -p "$JAVA/ui/admin"
+          mkdir -p "$JAVA/ui/theme_new"
+          mkdir -p "$JAVA/ui/components"
+          mkdir -p "$JAVA/handler"
 
-          # ═══════ ConfigUpdater.kt ═══════
+          # ConfigUpdater.kt
           if [ ! -f "$JAVA/handler/ConfigUpdater.kt" ]; then
           cat > "$JAVA/handler/ConfigUpdater.kt" << 'KTEOF'
           package com.v2ray.ang.handler
@@ -50,7 +53,7 @@ jobs:
           KTEOF
           fi
 
-          # ═══════ AdminPanelActivity.kt ═══════
+          # AdminPanelActivity.kt
           if [ ! -f "$JAVA/ui/admin/AdminPanelActivity.kt" ]; then
           cat > "$JAVA/ui/admin/AdminPanelActivity.kt" << 'KTEOF'
           package com.v2ray.ang.ui.admin
@@ -76,6 +79,7 @@ jobs:
 
           class AdminPanelActivity : ComponentActivity() {
               private val ADMIN_PASSWORD = "poiiu"
+
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   setContent {
@@ -85,6 +89,7 @@ jobs:
                       }
                   }
               }
+
               @Composable private fun AdminLogin(onOk: () -> Unit) {
                   var pass by remember { mutableStateOf("") }
                   var err by remember { mutableStateOf(false) }
@@ -104,6 +109,7 @@ jobs:
                           Modifier.fillMaxWidth()) { Text("ورود") }
                   }
               }
+
               @Composable fun AdminContent() {
                   val scope = rememberCoroutineScope()
                   var updating by remember { mutableStateOf(false) }
@@ -124,7 +130,7 @@ jobs:
                           status = "در حال دریافت..."
                           scope.launch {
                               val r = ConfigUpdater.fetchRemoteConfigs()
-                              status = if (r.isNotEmpty()) "✓ دریافت ${r.size} کانفیگ" else "✗ خطا در دریافت"
+                              status = if (r.isNotEmpty()) "دریافت ${r.size} کانفیگ موفق" else "خطا در دریافت"
                               updating = false
                           }
                       }, Modifier.fillMaxWidth(), enabled = !updating) {
@@ -137,7 +143,7 @@ jobs:
           KTEOF
           fi
 
-          # ═══════ ThemeAdvanced.kt (تم‌های جدید، بدون بازنویسی Theme.kt اصلی) ═══════
+          # ThemeAdvanced.kt
           if [ ! -f "$JAVA/ui/theme_new/ThemeAdvanced.kt" ]; then
           cat > "$JAVA/ui/theme_new/ThemeAdvanced.kt" << 'KTEOF'
           package com.v2ray.ang.ui.theme_new
@@ -169,7 +175,7 @@ jobs:
           KTEOF
           fi
 
-          # ═══════ ConnectionCard.kt ═══════
+          # ConnectionCard.kt
           if [ ! -f "$JAVA/ui/components/ConnectionCard.kt" ]; then
           cat > "$JAVA/ui/components/ConnectionCard.kt" << 'KTEOF'
           package com.v2ray.ang.ui.components
