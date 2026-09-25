@@ -1,0 +1,2753 @@
+════════════════════════════════════════════════════════════════
+  راهنمای جامع ساخت VPN اختصاصی از v2rayNG
+  فایل: MASTER_FIX_GUIDE.txt
+  توضیح: تمام کدها و مسیرها در یک فایل
+════════════════════════════════════════════════════════════════
+
+📌 نکته مهم: این فایل یک راهنمای کپی است. برای هر بخش، کد را
+کپی کرده و در فایل مقصد (که مسیرش نوشته شده) جایگذاری کنید.
+
+════════════════════════════════════════════════════════════════
+  بخش ۱: فایل پنل مدیریت (AdminPanelActivity.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/admin/
+  نام فایل: AdminPanelActivity.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.admin
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import com.v2ray.ang.handler.ConfigUpdater
+import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.handler.SpeedtestManager
+import kotlinx.coroutines.launch
+
+class AdminPanelActivity : ComponentActivity() {
+
+    private val ADMIN_PASSWORD = "poiiu"
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme {
+                var isAuthenticated by remember { mutableStateOf(false) }
+
+                AnimatedVisibility(
+                    visible = !isAuthenticated,
+                    enter = fadeIn(tween(500)),
+                    exit = fadeOut(tween(500))
+                ) {
+                    AdminLoginScreen(onLoginSuccess = { isAuthenticated = true })
+                }
+
+                AnimatedVisibility(
+                    visible = isAuthenticated,
+                    enter = fadeIn(tween(500)),
+                    exit = fadeOut(tween(500))
+                ) {
+                    AdminPanelContent()
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun AdminLoginScreen(onLoginSuccess: () -> Unit) {
+        var password by remember { mutableStateOf("") }
+        var error by remember { mutableStateOf(false) }
+        var isChecking by remember { mutableStateOf(false) }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(16.dp),
+                shape = RoundedCornerShape(24.dp),
+                elevation = CardDefaults.cardElevation(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Surface(
+                        modifier = Modifier.size(80.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        "ورود مدیر",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        "دسترسی محدود به مدیر سیستم",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = {
+                            password = it
+                            error = false
+                        },
+                        label = { Text("رمز عبور") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        isError = error,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        supportingText = if (error) {
+                            { Text("رمز عبور اشتباه است", color = MaterialTheme.colorScheme.error) }
+                        } else null
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = {
+                            isChecking = true
+                            if (password == ADMIN_PASSWORD) {
+                                onLoginSuccess()
+                            } else {
+                                error = true
+                            }
+                            isChecking = false
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isChecking
+                    ) {
+                        if (isChecking) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        } else {
+                            Text("ورود", style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun AdminPanelContent() {
+        val scope = rememberCoroutineScope()
+        var configs by remember {
+            mutableStateOf(MmkvManager.decodeAllServerConfig().toList())
+        }
+        var isUpdating by remember { mutableStateOf(false) }
+        var pingResult by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+        var showAddDialog by remember { mutableStateOf(false) }
+        var newConfigText by remember { mutableStateOf("") }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "پنل مدیریت",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "تعداد کانفیگ‌ها: ${configs.size}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        isUpdating = true
+                        scope.launch {
+                            val success = ConfigUpdater.updateConfigs()
+                            if (success) {
+                                configs = MmkvManager.decodeAllServerConfig().toList()
+                            }
+                            isUpdating = false
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isUpdating,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(if (isUpdating) "..." else "آپدیت")
+                }
+
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val results = mutableMapOf<String, Long>()
+                            SpeedtestManager.testAllServersPing(configs) { server, delay ->
+                                results[server.guid] = delay
+                                pingResult = results.toMap()
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Speed, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("پینگ")
+                }
+
+                Button(
+                    onClick = { showAddDialog = true },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("افزودن")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(configs) { config ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    config.remarks,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "${config.server}:${config.serverPort}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                pingResult[config.guid]?.let { delay ->
+                                    Text(
+                                        if (delay >= 0) "پینگ: ${delay}ms" else "پینگ: ناموفق",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (delay >= 0)
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    MmkvManager.removeServer(config.guid)
+                                    configs = MmkvManager.decodeAllServerConfig().toList()
+                                }
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "حذف",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showAddDialog) {
+            AlertDialog(
+                onDismissRequest = { showAddDialog = false },
+                title = { Text("افزودن کانفیگ جدید") },
+                text = {
+                    OutlinedTextField(
+                        value = newConfigText,
+                        onValueChange = { newConfigText = it },
+                        label = { Text("لینک کانفیگ (vless/vmess/ss)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (newConfigText.isNotBlank()) {
+                                scope.launch {
+                                    com.v2ray.ang.handler.AngConfigManager.importBatchConfig(
+                                        newConfigText,
+                                        "admin_added",
+                                        append = true
+                                    )
+                                    configs = MmkvManager.decodeAllServerConfig().toList()
+                                    newConfigText = ""
+                                    showAddDialog = false
+                                }
+                            }
+                        }
+                    ) { Text("افزودن") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showAddDialog = false }) {
+                        Text("انصراف")
+                    }
+                }
+            )
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۲: فایل آپدیت‌کننده کانفیگ (ConfigUpdater.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/handler/
+  نام فایل: ConfigUpdater.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.handler
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import java.net.HttpURLConnection
+import java.net.URL
+
+object ConfigUpdater {
+
+    private const val CONFIG_URL =
+        "https://raw.githubusercontent.com/nimaxshat1392-alt/v2rayNG2233/main/configs.json"
+
+    suspend fun fetchRemoteConfigs(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL(CONFIG_URL)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+            connection.setRequestProperty("User-Agent", "MyVPN/1.0")
+
+            val response = connection.inputStream.bufferedReader().readText()
+            val jsonArray = JSONArray(response)
+            val configs = mutableListOf<String>()
+
+            for (i in 0 until jsonArray.length()) {
+                configs.add(jsonArray.getString(i))
+            }
+            configs
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    suspend fun updateConfigs(): Boolean = withContext(Dispatchers.IO) {
+        val remoteConfigs = fetchRemoteConfigs()
+        if (remoteConfigs.isEmpty()) return@withContext false
+
+        MmkvManager.removeServerViaSubid("remote_configs")
+
+        AngConfigManager.importBatchConfig(
+            remoteConfigs.joinToString("\n"),
+            "remote_configs",
+            append = false
+        )
+        true
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۳: فایل پینگ (SpeedtestManager.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/handler/
+  نام فایل: SpeedtestManager.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.handler
+
+import com.v2ray.ang.dto.entities.ProfileItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.withContext
+import java.net.InetSocketAddress
+import java.net.Socket
+
+object SpeedtestManager {
+
+    suspend fun testAllServersPing(
+        servers: List<ProfileItem>,
+        onResult: (ProfileItem, Long) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        val maxConcurrency = 10
+        servers.chunked(maxConcurrency).forEach { chunk ->
+            chunk.map { server ->
+                async {
+                    val delay = socketConnectTime(server.server, server.serverPort)
+                    withContext(Dispatchers.Main) {
+                        onResult(server, delay)
+                    }
+                }
+            }.awaitAll()
+        }
+    }
+
+    fun socketConnectTime(address: String, port: Int): Long {
+        return try {
+            val startTime = System.currentTimeMillis()
+            val socket = Socket()
+            socket.connect(InetSocketAddress(address, port), 2000)
+            val endTime = System.currentTimeMillis()
+            socket.close()
+            endTime - startTime
+        } catch (e: Exception) {
+            -1L
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۴: فایل تم (Theme.kt) - رنگ‌های پویا
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/theme/
+  نام فایل: Theme.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.theme
+
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
+
+private val DarkColors = darkColorScheme()
+private val LightColors = lightColorScheme()
+
+@Composable
+fun MyVpnTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val colorScheme = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val context = LocalContext.
+            if (darkTheme) dynamicDarkColorScheme(context)
+            else dynamicLightColorScheme(context)
+        }
+        darkTheme -> DarkColors
+        else -> LightColors
+    }
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۵: فایل تنظیمات مدرن (SettingsScreen.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/settings/
+  نام فایل: SettingsScreen.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.settings
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun SettingsScreen() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Text(
+            "تنظیمات",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingsCard(
+            title = "اسپلیت تانل",
+            subtitle = "انتخاب اپلیکیشن‌هایی که از VPN عبور کنند",
+            icon = Icons.Default.Apps,
+            onClick = { }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsCard(
+            title = "Kill Switch",
+            subtitle = "قطع اینترنت در صورت قطع VPN",
+            icon = Icons.Default.Security,
+            onClick = { }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsCard(
+            title = "ظاهر برنامه",
+            subtitle = "تم تاریک، روشن یا خودکار",
+            icon = Icons.Default.Palette,
+            onClick = { }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsCard(
+            title = "تست سرعت",
+            subtitle = "پینگ و سرعت سرورها",
+            icon = Icons.Default.Speed,
+            onClick = { }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsCard(
+            title = "درباره",
+            subtitle = "نسخه ۱.۰.۰",
+            icon = Icons.Default.Info,
+            onClick = { }
+        )
+    }
+}
+
+@Composable
+fun SettingsCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۶: اضافه کردن به AndroidManifest.xml
+  مسیر: V2rayNG/app/src/main/AndroidManifest.xml
+  ⚠️ این خط را قبل از </application> اضافه کنید
+════════════════════════════════════════════════════════════════
+
+        <activity
+            android:name=".ui.admin.AdminPanelActivity"
+            android:exported="false"
+            android:label="Admin Panel" />
+
+════════════════════════════════════════════════════════════════
+  بخش ۷: فایل کانفیگ‌ها (configs.json)
+  مسیر: ریشه مخزن (کنار README.md)
+  نام فایل: configs.json
+════════════════════════════════════════════════════════════════
+
+[
+  "vless://4bdeee92-97e8-414d-bef6-ec1d5e2ab73b@5.157.10.148:443?security=reality&encryption=none&pbk=x6p656szvu_3CKLsJ4NtkooRvdTVGx7IoPca_p58_jA&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=surstreming.vvzzkontaktezzvv.garden&sid=fb442438e2223836#mlmvpn2570",
+  "vless://c5694dc5-39fd-4a92-8430-3837baa522a3@gesmankos.sadiepinki.com:443?encryption=none&flow=xtls-rprx-vision&fp=&pbk=rCkSHJ7goy7ZvSlau4LfXF-QLloOJMNeMxpeeQtwtVs&security=reality&sid=4fa44664f6a566d3&sni=gesmankos.sadiepinki.com&type=tcp#mlmvpn3711",
+  "ss://YWVzLTEyOC1nY206c2hhZG93c29ja3M@156.146.38.169:443#mlmvpn3044",
+  "ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTo0YTJyZml4b3BoZGpmZmE4S1ZBNEFh@193.29.139.234:8080?type=tcp&headerType=none#mlmvpn2820",
+  "vless://d65cc14c-f53f-4fe2-b262-97856601319c@169.40.42.15:443?security=reality&encryption=none&pbk=e2RLf57Li_-MDZGE9ss1BWPgP54mqRb5PfXhW2jcVVg&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=yahoo.com&sid=c39cc7310a#mlmvpn565",
+  "vless://928e6cce-8ced-4243-9a48-a6642edd09b0@47.239.6.251:13779?security=reality&encryption=none&pbk=llTyp52oRXnJmQ3I9UUrmlwbMA79B-wLCRHCu-8dLGg&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=tesla.com&sid=af1bdd293097b664#mlmvpn5918",
+  "vless://ff6d2dda-7b90-404e-9951-34b3124bfdfa@193.56.135.137:9543?security=reality&encryption=none&pbk=M6Ck7wUfOLhQl4582CBnaXwscPEP6SCpdEkUDzoj4Fc&headerType=none&fp=safari&type=tcp&flow=xtls-rprx-vision&sni=storage.yandexcloud.net&sid=123abcde#mlmvpn9679",
+  "vless://dac0bd30-008f-42c9-b377-bfc0dcfa6f0b@slowkd.sadiepinki.com:443?encryption=none&flow=xtls-rprx-vision&fp=&pbk=z37XIezsPyfMgmdXyFd9qT4C4maDAs1OcRt-wfyrXVo&security=reality&sid=9c2378562188c3cb&sni=slowkd.sadiepinki.com&type=tcp#mlmvpn5365",
+  "vless://2459c8ec-62a5-4323-a028-b3f9e7b87dcd@95.182.97.118:52302?Telegram=@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad&mode=auto&path=%2F&security=reality&encryption=none&extra=%7B%22mode%22%3A%22auto%22%2C%22xPaddingBytes%22%3A%22100-1000%22%2C%22xPaddingObfsMode%22%3Atrue%2C%22xmux%22%3A%7B%22cMaxReuseTimes%22%3A0%2C%22hKeepAlivePeriod%22%3A15%2C%22hMaxRequestTimes%22%3A%22100-300%22%2C%22hMaxReusableSecs%22%3A%22600-1200%22%2C%22maxConcurrency%22%3A%22%22%2C%22maxConnections%22%3A%224%22%7D%7D&pbk=_m164aXDEdBgOWC2OL6AzduW0gJfea5-Bl6sAuKJJQA&fp=chrome&spx=%2Ffa5a1bb63e9858d&type=xhttp&sni=goo.gl&sid=d835a28209ac47b5#mlmvpn5772",
+  "vmess://eyJhZGQiOiJ3ZWItcG1hcGRjYi1tYWJ0dS51cC5yYWlsd2F5LmFwcCIsImFpZCI6IjAiLCJhbHBuIjoiaHR0cC8xLjEiLCJmcCI6IiIsImhvc3QiOiJ3ZWItcG1hcGRjYi1tYWJ0dS51cC5yYWlsd2F5LmFwcCIsImlkIjoiZTVjYzEzMGEtYzc3My00YzNjLWJlZWEtYjU1ZmVlMjhlZDcyIiwiaW5zZWN1cmUiOiIwIiwibmV0Ijoid3MiLCJwYXRoIjoiL3ZtLXdzIiwicGNzIjoiIiwicG9ydCI6IjQ0MyIsInNjeSI6ImF1dG8iLCJzbmkiOiJ3ZWItcG1hcGRjYi1tYWJ0dS51cC5yYWlsd2F5LmFwcCIsInRscyI6InRscyIsInR5cGUiOiJub25lIiwidiI6IjIiLCJ2Y24iOiIiLCJwcyI6IlVTIPCfh7rwn4e4IHwgQFJheWRpa2FseCB8IEU2RUM2MyJ9#mlmvpn5418",
+  "vmess://eyJhZGQiOiIxNjUuMTU0LjE5NS4zOCIsImFpZCI6IjAiLCJhbHBuIjoiIiwiZnAiOiIiLCJob3N0IjoiIiwiaWQiOiI5NTlhOGNhZi00Y2VhLTQzZDAtYTU0OC0zNjI4ZTdkZGZhZmMiLCJpbnNlY3VyZSI6IjAiLCJuZXQiOiJ0Y3AiLCJwYXRoIjoiIiwicGNzIjoiIiwicG9ydCI6MzUwMzQsInBzIjoiVFcg8J+HufCfh7wgfCBAUmF5ZGlrYWx4IHwgODI2NTI3Iiwic2N5IjoiYXV0byIsInNuaSI6IiIsInRscyI6Im5vbmUiLCJ0eXBlIjoibm9uZSIsInYiOiIyIiwidmNuIjoiIiwibmFtZSI6IlRXIPCfh7nwn4e8IHwgQFJheWRpa2FseCB8IDgyNjUyNyJ9#mlmvpn8203",
+  "vmess://eyJhZGQiOiJhaWRyaXZlcmNhdC5vcmciLCJhaWQiOiIwIiwiYWxwbiI6IiIsImZwIjoiIiwiaG9zdCI6ImFpZHJpdmVyY2F0Lm9yZyIsImlkIjoiMDNmY2M2MTgtYjkzZC02Nzk2LTZhZWQtOGEzOGM5NzVkNTgxIiwiaW5zZWN1cmUiOiIwIiwibmV0Ijoid3MiLCJwYXRoIjoiL2xpbmt2d3MiLCJwY3MiOiIiLCJwb3J0IjoiNDQzIiwicHMiOiJERSDwn4ep8J+HqiB8IEBSYXlkaWthbHggfCAwQTQxRkQiLCJzY3kiOiJhdXRvIiwic25pIjoiYWlkcml2ZXJjYXQub3JnIiwidGxzIjoidGxzIiwidHlwZSI6Im5vbmUiLCJ2IjoiMiIsInZjbiI6IiJ9#mlmvpn7438",
+  "vless://aa7461af-3176-42a3-8974-59930189c521@icook.tw:8880?security=none&type=ws&path=/pyip=ProxyIP.US.CMLiussss.net&host=round-block-e864.326.workers.dev&packetEncoding=xudp#mlmvpn1716",
+  "vless://48ff2b70-e180-582f-8866-d9a2edeed5f5@15.204.97.197:23576?security=reality&type=raw&sni=fuck.rkn&fp=chrome&flow=xtls-rprx-vision&sid=01&pbk=1y5h2FGWKXTJ9xLPCqPo6Mw7RxoZzh6fGkEQKNxpZ3s&encryption=none#mlmvpn8752",
+  "vmess://eyJhZGQiOiIxNjcuODguNjIuMTI0IiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6IjA0NjIxYmFlLWFiMzYtMTFlYy1iOTA5LTAyNDJhYzEyMDAwMiIsImluc2VjdXJlIjoiMCIsIm5ldCI6InRjcCIsInBhdGgiOiIiLCJwb3J0IjoiMjIzMjQiLCJwcyI6IlVTIPCfh7rwn4e4IHwgQFJheWRpa2FseCB8IDdBQThDMyIsInNjeSI6ImF1dG8iLCJzbmkiOiIiLCJ0bHMiOiIiLCJ0eXBlIjoibm9uZSIsInYiOiIyIn0=#mlmvpn7249",
+  "vmess://eyJ2IjoiMiIsInBzIjoiVVMg8J+HuvCfh7ggfCBAUmF5ZGlrYWx4IHwgMUFEODVBIiwiYWRkIjoiNDcuODUuMTg4LjMwIiwicG9ydCI6IjEyMDA0IiwiaWQiOiI4YjU1NTJiZC00Y2M3LTRjYWMtYWYwOC04MWMyMTY4NmZkNGYiLCJhaWQiOiIwIiwic2N5IjoiYXV0byIsIm5ldCI6InRjcCIsInR5cGUiOiIiLCJ0bHMiOiIifQ==#mlmvpn1844",
+  "vless://17f388d7-1fa2-440f-a8f4-720b72d19195@132.243.65.151:443?type=tcp&security=reality&flow=xtls-rprx-vision&fp=firefox&pbk=RO5YMxxtJmZo2w370qG-seJ41toowHPbz6i2uXJ2gG0&sid=7a3f9e2b1c8d4f6a&sni=ee.global-cdn.org#mlmvpn7904",
+  "vless://c5694dc5-39fd-4a92-8430-3837baa522a3@slowkd.sadiepinki.com:443?type=tcp&security=reality&flow=xtls-rprx-vision&fp=chrome&pbk=z37XIezsPyfMgmdXyFd9qT4C4maDAs1OcRt-wfyrXVo&sid=9c2378562188c3cb&sni=slowkd.sadiepinki.com#mlmvpn3523",
+  "vless://a90c264d-3853-4eef-9a3d-628b2d02d15e@104.21.39.137:443?security=tls&type=ws&path=/CjBjB9sn5pCvaSwScc&host=5-M19.IKL.cCWU.cc&packetEncoding=xudp&sni=5-M19.ikL.Ccwu.cc&fp=chrome#mlmvpn2044",
+  "vless://71091100-c6ed-41fa-84ac-acf7ff9eeb7f@slowkd.sadiepinki.com:443?security=reality&encryption=none&pbk=z37XIezsPyfMgmdXyFd9qT4C4maDAs1OcRt-wfyrXVo&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=slowkd.sadiepinki.com&sid=9c2378562188c3cb#mlmvpn9341",
+  "vless://d65cc14c-f53f-4fe2-b262-97856601319c@169.40.42.133:443?security=reality&encryption=none&pbk=e2RLf57Li_-MDZGE9ss1BWPgP54mqRb5PfXhW2jcVVg&headerType=&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=yahoo.com&sid=c39cc7310a#mlmvpn2614",
+  "vless://f28e0ce1-ed75-4e90-b069-5215a80dfb4a@83.168.95.145:443?security=reality&encryption=none&pbk=AcuvO982QLzf76fVydfSuJIiF5520rmj7AxpaxyRwUg&headerType=&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=google.com&sid=d345ad4657adeef9#mlmvpn2769",
+  "vless://2c070f10-57e8-442b-b6cb-ff39b35d929d@95.85.245.163:442?Telegram=@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad,@GozargahAzad&security=reality&encryption=none&pbk=urhSusjL1QqHdmlCrvbC9yBftecrgQMuhWmfGh0CUFg&headerType=none&fp=chrome&spx=/a938861e46cc64b&type=tcp&flow=xtls-rprx-vision&sni=p-nt-www-amazon-com-kalias.amazon.com&sid=ab#mlmvpn985"
+]
+
+════════════════════════════════════════════════════════════════
+  بخش ۸: تغییرات دستی در MainScreen.kt (اختیاری)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/MainScreen.kt
+════════════════════════════════════════════════════════════════
+
+برای اعمال این بخش، در فایل MainScreen.kt:
+
+۱. بخش floatingActionButton را حذف کنید.
+۲. در bottomBar کد زیر را اضافه کنید:
+
+bottomBar = {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(100.dp)
+            .background(MaterialTheme.colorScheme.surface),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            onClick = { /* تابع اتصال */ },
+            modifier = Modifier.size(80.dp),
+            shape = CircleShape,
+            color = if (isRunning)
+                MaterialTheme.colorScheme.primary
+            else
+                MaterialTheme.colorScheme.surfaceVariant,
+            shadowElevation = if (isRunning) 12.dp else 4.dp
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+        }
+    }
+}
+
+۳. برای دسترسی مخفی به پنل ادمین، در TopAppBar:
+
+title = {
+    var tapCount by remember { mutableIntStateOf(0) }
+    val context = LocalContext.current
+    Text(
+        text = "VPN من",
+        modifier = Modifier.clickable {
+            tapCount++
+            if (tapCount >= 7) {
+                tapCount = 0
+                context.startActivity(
+                    android.content.Intent(
+                        context,
+                        com.v2ray.ang.ui.admin.AdminPanelActivity::class.java
+                    )
+                )
+            }
+        },
+        fontWeight = FontWeight.Bold
+    )
+}
+
+════════════════════════════════════════════════════════════════
+  پایان راهنما
+  موفق باشید!
+═══════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════
+  بخش ۹: داشبورد مدرن و پیشرفته (ModernDashboard.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/dashboard/
+  نام فایل: ModernDashboard.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.dashboard
+
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun ModernDashboard(
+    isConnected: Boolean,
+    uploadSpeed: String,
+    downloadSpeed: String,
+    ping: String,
+    onToggleConnection: () -> Unit
+) {
+    // انیمیشن چرخش دکمه
+    val infiniteTransition = rememberInfiniteTransition(label = "rotation")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation_anim"
+    )
+
+    // گرادیانت پس‌زمینه
+    val gradient = Brush.verticalGradient(
+        colors = if (isConnected) {
+            listOf(Color(0xFF1E3A8A), Color(0xFF0F172A)) // آبی تیره -> مشکی
+        } else {
+            listOf(Color(0xFF374151), Color(0xFF111827)) // خاکستری تیره -> مشکی
+        }
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(gradient)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // وضعیت اتصال
+            Text(
+                text = if (isConnected) "متصل" else "قطع",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = if (isConnected) "ارتباط شما امن است" else "برای اتصال دکمه را بزنید",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // دکمه اتصال بزرگ با انیمیشن
+            Box(contentAlignment = Alignment.Center) {
+                if (isConnected) {
+                    // حلقه چرخان دور دکمه
+                    Box(
+                        modifier = Modifier
+                            .size(200.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color(0xFF3B82F6),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+                }
+
+                Button(
+                    onClick = onToggleConnection,
+                    modifier = Modifier.size(160.dp),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isConnected)
+                            Color(0xFF10B981) // سبز
+                        else
+                            Color(0xFF3B82F6) // آبی
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 16.dp,
+                        pressedElevation = 8.dp
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PowerSettingsNew,
+                        contentDescription = "اتصال",
+                        modifier = Modifier.size(64.dp),
+                        tint = Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // آمار سرعت و پینگ
+            if (isConnected) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    StatCard(
+                        icon = Icons.Default.ArrowUpward,
+                        label = "آپلود",
+                        value = uploadSpeed,
+                        color = Color(0xFF10B981)
+                    )
+                    StatCard(
+                        icon = Icons.Default.ArrowDownward,
+                        label = "دانلود",
+                        value = downloadSpeed,
+                        color = Color(0xFF3B82F6)
+                    )
+                    StatCard(
+                        icon = Icons.Default.PowerSettingsNew,
+                        label = "پینگ",
+                        value = ping,
+                        color = Color(0xFFF59E0B)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    color: Color
+) {
+    Card(
+        modifier = Modifier
+            .width(100.dp)
+            .height(100.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.1f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = color,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۰: تم‌های پیشرفته و AMOLED (AdvancedThemes.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/theme/
+  نام فایل: AdvancedThemes.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.theme
+
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.graphics.Color
+
+// تم AMOLED (مشکی مطلق - صرفه‌جویی در باتری)
+val AmoledBlackColors = darkColorScheme(
+    primary = Color(0xFF00E5FF),      // آبی روشن
+    onPrimary = Color(0xFF000000),
+    primaryContainer = Color(0xFF00363D),
+    onPrimaryContainer = Color(0xFF00E5FF),
+    secondary = Color(0xFFB388FF),    // بنفش روشن
+    background = Color(0xFF000000),   // مشکی مطلق
+    surface = Color(0xFF0A0A0A),
+    onBackground = Color(0xFFE0E0E0),
+    onSurface = Color(0xFFE0E0E0),
+    error = Color(0xFFFF5252),
+    outline = Color(0xFF333333)
+)
+
+// تم تاریک نئون (برای ظاهر سایبرپانک)
+val CyberpunkColors = darkColorScheme(
+    primary = Color(0xFFFF00FF),      // صورتی نئون
+    onPrimary = Color(0xFF000000),
+    secondary = Color(0xFF00FFFF),    // فیروزه‌ای نئون
+    background = Color(0xFF0D0221),   // بنفش تیره
+    surface = Color(0xFF1A0B2E),
+    onBackground = Color(0xFFE0E0E0),
+    onSurface = Color(0xFFE0E0E0),
+    error = Color(0xFFFF0040)
+)
+
+// تم روشن مینیمال
+val MinimalLightColors = lightColorScheme(
+    primary = Color(0xFF2E7D32),      // سبز تیره
+    onPrimary = Color(0xFFFFFFFF),
+    background = Color(0xFFF5F5F5),
+    surface = Color(0xFFFFFFFF),
+    onBackground = Color(0xFF212121),
+    onSurface = Color(0xFF212121),
+    error = Color(0xFFD32F2F)
+)
+
+// تم تاریک حرفه‌ای
+val ProfessionalDarkColors = darkColorScheme(
+    primary = Color(0xFF64B5F6),      // آبی ملایم
+    onPrimary = Color(0xFF000000),
+    background = Color(0xFF121212),
+    surface = Color(0xFF1E1E1E),
+    onBackground = Color(0xFFE0E0E0),
+    onSurface = Color(0xFFE0E0E0),
+    error = Color(0xFFEF5350)
+)
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۱: اسپلیت تانل پیشرفته (SplitTunnelingScreen.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/settings/
+  نام فایل: SplitTunnelingScreen.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.settings
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun SplitTunnelingScreen(
+    installedApps: List<AppInfo>,
+    selectedApps: Set<String>,
+    onToggleApp: (String) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredApps = installedApps.filter {
+        it.appName.contains(searchQuery, ignoreCase = true)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            "اسپلیت تانل",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "فقط اپلیکیشن‌های انتخاب شده از VPN عبور می‌کنند",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // نوار جستجو
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("جستجوی اپلیکیشن...") },
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = null)
+            },
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            items(filteredApps) { app ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onToggleApp(app.packageName) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (app.packageName in selectedApps)
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = app.packageName in selectedApps,
+                            onCheckedChange = { onToggleApp(app.packageName) }
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                app.appName,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                app.packageName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+data class AppInfo(
+    val appName: String,
+    val packageName: String
+)
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۲: تنظیمات پیشرفته (AdvancedSettings.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/settings/
+  نام فایل: AdvancedSettings.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.settings
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun AdvancedSettingsScreen(
+    onBack: () -> Unit
+) {
+    var dnsServer by remember { mutableStateOf("1.1.1.1") }
+    var mtuSize by remember { mutableStateOf("1500") }
+    var enableFragmentation by remember { mutableStateOf(true) }
+    var enableMux by remember { mutableStateOf(false) }
+    var muxConcurrency by remember { mutableStateOf("8") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "بازگشت")
+            }
+            Text(
+                "تنظیمات پیشرفته",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // DNS
+        SettingsSection(title = "DNS سفارشی") {
+            OutlinedTextField(
+                value = dnsServer,
+                onValueChange = { dnsServer = it },
+                label = { Text("آدرس DNS") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // MTU
+        SettingsSection(title = "اندازه MTU") {
+            OutlinedTextField(
+                value = mtuSize,
+                onValueChange = { mtuSize = it },
+                label = { Text("مقدار MTU (پیشنهادی: 1500)") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Fragmentation
+        SettingsSwitch(
+            title = "تکه‌تکه کردن بسته‌ها",
+            subtitle = "برای دور زدن فیلترینگ عمیق (DPI)",
+            icon = Icons.Default.Security,
+            checked = enableFragmentation,
+            onCheckedChange = { enableFragmentation = it }
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Mux
+        SettingsSwitch(
+            title = "فعال‌سازی Mux",
+            subtitle = "چند برابر کردن سرعت اتصال",
+            icon = Icons.Default.Speed,
+            checked = enableMux,
+            onCheckedChange = { enableMux = it }
+        )
+
+        if (enableMux) {
+            Spacer(modifier = Modifier.height(8.dp))
+            SettingsSection(title = "تعداد همزمانی Mux") {
+                OutlinedTextField(
+                    value = muxConcurrency,
+                    onValueChange = { muxConcurrency = it },
+                    label = { Text("تعداد (پیشنهادی: 8)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsSection(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+fun SettingsSwitch(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
+            )
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۳: به‌روزرسانی Theme.kt برای پشتیبانی از تم‌های جدید
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/theme/Theme.kt
+  ⚠️ این کد را جایگزین تابع MyVpnTheme قبلی کنید
+════════════════════════════════════════════════════════════════
+
+@Composable
+fun MyVpnTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: String = "auto", // "auto", "light", "dark", "amoled", "cyberpunk"
+    content: @Composable () -> Unit
+) {
+    val colorScheme = when (themeMode) {
+        "light" -> MinimalLightColors
+        "dark" -> ProfessionalDarkColors
+        "amoled" -> AmoledBlackColors
+        "cyberpunk" -> CyberpunkColors
+        else -> {
+            // حالت خودکار
+            if (darkTheme) ProfessionalDarkColors else MinimalLightColors
+        }
+    }
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۴: منوی انتخاب تم در تنظیمات
+  مسیر: V2rayNG
+  نام فایل: ThemeSelector.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.settings
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun ThemeSelector(
+    currentTheme: String,
+    onThemeSelected: (String) -> Unit
+) {
+    val themes = listOf(
+        ThemeOption("auto", "خودکار", "پیروی از سیستم", Color(0xFF607D8B)),
+        ThemeOption("light", "روشن", "مینیمال و ساده", Color(0xFF4CAF50)),
+        ThemeOption("dark", "تاریک", "حرفه‌ای", Color(0xFF263238)),
+        ThemeOption("amoled", "AMOLED", "مشکی مطلق، صرفه‌جویی باتری", Color(0xFF000000)),
+        ThemeOption("cyberpunk", "سایبرپانک", "نئون و مدرن", Color(0xFFFF00FF))
+    )
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Text(
+                "انتخاب تم",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        items(themes) { theme ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onThemeSelected(theme.id) },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (currentTheme == theme.id)
+                        MaterialTheme.colorScheme.primaryContainer
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(theme.color)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            theme.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            theme.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (currentTheme == theme.id) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "انتخاب شده",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+data class ThemeOption(
+    val id: String,
+    val name: String,
+    val description: String,
+    val color: Color
+)
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۵: کارت اتصال زیبا (ConnectionCard.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/components/
+  نام فایل: ConnectionCard.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun ConnectionCard(
+    serverName: String,
+    countryFlag: String,
+    protocol: String,
+    ping: String,
+    isConnected: Boolean
+) {
+    val gradient = if (isConnected) {
+        Brush.horizontalGradient(
+            colors = listOf(Color(0xFF1E3A8A), Color(0xFF3B82F6))
+        )
+    } else {
+        Brush.horizontalGradient(
+            colors = listOf(Color(0xFF374151), Color(0xFF6B7280))
+        )
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(gradient)
+                .padding(20.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // پرچم کشور
+                Surface(
+                    modifier = Modifier.size(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White.copy(alpha = 0.2f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = countryFlag,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = serverName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Security,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = protocol,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Icon(
+                            Icons.Default.Speed,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = ping,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۶: گرافیک زنده سرعت (TrafficGraph.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/components/
+  نام فایل: TrafficGraph.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.components
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import kotlin.math.sin
+
+@Composable
+fun TrafficGraph(
+    downloadHistory: List<Float>,
+    uploadHistory: List<Float>
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "ترافیک زنده",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+            ) {
+                val width = size.width
+                val height = size.height
+
+                // رسم خط دانلود
+                if (downloadHistory.size > 1) {
+                    val path = Path()
+                    downloadHistory.forEachIndexed { index, value ->
+                        val x = (index.toFloat() / (downloadHistory.size - 1)) * width
+                        val y = height - (value * height / 100f)
+                        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    drawPath(
+                        path = path,
+                        color = Color(0xFF3B82F6),
+                        style = Stroke(width = 4f)
+                    )
+                }
+
+                // رسم خط آپلود
+                if (uploadHistory.size > 1) {
+                    val path = Path()
+                    uploadHistory.forEachIndexed { index, value ->
+                        val x = (index.toFloat() / (uploadHistory.size - 1)) * width
+                        val y = height - (value * height / 100f)
+                        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    drawPath(
+                        path = path,
+                        color = Color(0xFF10B981),
+                        style = Stroke(width = 4f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .background(Color(0xFF3B82F6), RoundedCornerShape(50))
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("دانلود", style = MaterialTheme.typography.bodySmall)
+                }
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .background(Color(0xFF10B981), RoundedCornerShape(50))
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("آپلود", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۷: سیستم اعلان مدرن (ModernNotification.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/util/
+  نام فایل: ModernNotification.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.util
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import com.v2ray.ang.R
+import com.v2ray.ang.ui.main.MainActivity
+
+object ModernNotification {
+
+    private const val CHANNEL_ID = "vpn_channel"
+    private const val NOTIFICATION_ID = 1001
+
+    fun createNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "وضعیت VPN"
+            val descriptionText = "نمایش وضعیت اتصال"
+            val importance = NotificationManager.IMPORTANCE_LOW
+            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
+                description = descriptionText
+                setShowBadge(false)
+            }
+            val notificationManager: NotificationManager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    fun showNotification(context: Context, isConnected: Boolean, serverName: String) {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+            context, 0, intent, PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_vpn)
+            .setContentTitle(if (isConnected) "متصل به VPN" else "قطع از VPN")
+            .setContentText(serverName)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(pendingIntent)
+            .setOngoing(isConnected)
+            .setAutoCancel(!isConnected)
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(NOTIFICATION_ID, builder.build())
+    }
+
+    fun cancelNotification(context: Context) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(NOTIFICATION_ID)
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۸: تغییر نام بسته و ظاهر برای مخفی کردن هویت اصلی
+  توضیح: برای اینکه کاربران متوجه نشوند این همان v2rayNG است،
+  باید نام پکیج، نام برنامه و آیکون را تغییر دهید.
+════════════════════════════════════════════════════════════════
+
+مرحله ۱: تغییر نام برنامه (App Name)
+مسیر: V2rayNG/app/src/main/res/values/strings.xml
+کد زیر را پیدا کنید:
+<string name="app_name">v2rayNG</string>
+و آن را به این تغییر دهید:
+<string name="app_name">VPN Pro</string>
+
+مرحله ۲: تغییر نام پکیج (Package Name)
+مسیر: V2rayNG/app/build.gradle.kts
+کد زیر را پیدا کنید:
+applicationId = "com.v2ray.ang"
+و آن را به یک نام جدید و منحصر به فرد تغییر دهید، مثلاً:
+applicationId = "com.mlm.vpnpro"
+
+مرحله ۳: تغییر آیکون برنامه
+مسیر: V2rayNG/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+فایل‌های آیکون فعلی را با یک آیکون جدید و زیبا (مثلاً یک سپر یا قفل) جایگزین کنید.
+
+مرحله ۴: حذف نام v2rayNG از تنظیمات و درباره برنامه
+تمام فایل‌های XML و Kotlin را جستجو کنید و هر جا کلمه "v2rayNG" یا "V2Ray" یا "Xray" بود، آن را با نام برند جدید خود (مثلاً "MLM VPN") جایگزین کنید.
+
+════════════════════════════════════════════════════════════════
+  بخش ۱۹: تنظیمات پیشرفته پنل ادمین (تغییر رمز و افزودن کانفیگ)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/admin/AdminPanelActivity.kt
+  ⚠️ این کد را به انتهای فایل AdminPanelActivity.kt اضافه کنید
+════════════════════════════════════════════════════════════════
+
+@Composable
+fun ChangePasswordDialog(onDismiss: () -> Unit) {
+    var oldPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تغییر رمز عبور") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = oldPassword,
+                    onValueChange = { oldPassword = it },
+                    label = { Text("رمز فعلی") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it },
+                    label = { Text("رمز جدید") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it },
+                    label = { Text("تکرار رمز جدید") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (oldPassword != "poiiu") {
+                        error = "رمز فعلی اشتباه است"
+                    } else if (newPassword != confirmPassword) {
+                        error = "رمز جدید و تکرار آن یکسان نیستند"
+                    } else if (newPassword.length < 4) {
+                        error = "رمز باید حداقل ۴ کاراکتر باشد"
+                    } else {
+                        // ذخیره رمز جدید در MMKV
+                        MmkvManager.encodeSettings("admin_password", newPassword)
+                        onDismiss()
+                    }
+                }
+            ) { Text("تغییر") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("انصراف") }
+        }
+    )
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۲۰: راهنمای نهایی و ساخت پروژه
+════════════════════════════════════════════════════════════════
+
+۱. تمام کدهای بالا را در فایل‌های مربوطه در Android Studio کپی کنید.
+۲. فایل configs.json را در ریشه مخزن گیت‌هاب خود بسازید و کانفیگ‌ها را در آن قرار دهید.
+۳. در فایل ConfigUpdater.kt آدرس raw گیت‌هاب خود را جایگزین کنید.
+۴. پروژه را در Android Studio باز کنید و دکمه Sync Project with Gradle Files را بزنید.
+۵. سپس با استفاده از منوی Build > Build APK، فایل نصبی را بسازید و روی گوشی خود نصب کنید.
+۶. برای ورود به پنل ادمین، ۷ بار روی عنوان برنامه تپ کنید و رمز poiiu را وارد کنید.
+
+════════════════════════════════════════════════════════════════
+  پایان راهنما - موفق باشید!
+════════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════
+  بخش ۲۱: لیست سرورهای مدرن و گرافیکی (ModernServerList.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/main/
+  نام فایل: ModernServerList.kt
+  توضیح: جایگزین لیست ساده فعلی می‌شود
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.main
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.v2ray.ang.dto.entities.ProfileItem
+
+@Composable
+fun ModernServerList(
+    servers: List<ProfileItem>,
+    selectedServer: ProfileItem?,
+    onServerSelected: (ProfileItem) -> Unit,
+    pingMap: Map<String, Long> = emptyMap()
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Text(
+                "سرورهای موجود",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
+        items(servers) { server ->
+            val isSelected = server.guid == selectedServer?.guid
+            val ping = pingMap[server.guid]
+
+            // انیمیشن تغییر رنگ کارت هنگام انتخاب
+            val cardColor by animateColorAsState(
+                targetValue = if (isSelected)
+                    MaterialTheme.colorScheme.primaryContainer
+                else
+                    MaterialTheme.colorScheme.surfaceVariant,
+                animationSpec = tween(300),
+                label = "card_color"
+            )
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onServerSelected(server) },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = cardColor),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = if (isSelected) 8.dp else 2.dp
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // آیکون پرچم یا وضعیت
+                    Surface(
+                        modifier = Modifier.size(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSelected)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.surface
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Flag,
+                                contentDescription = null,
+                                tint = if (isSelected)
+                                    MaterialTheme.colorScheme.onPrimary
+                                else
+                                    MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = server.remarks.ifEmpty { "سرور بدون نام" },
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${server.server}:${server.serverPort}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (ping != null) {
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Icon(
+                                    imageVector = Icons.Default.SignalCellularAlt,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = when {
+                                        ping < 100 -> Color(0xFF10B981) // سبز
+                                        ping < 300 -> Color(0xFFF59E0B) // نارنجی
+                                        else -> Color(0xFFEF4444)        // قرمز
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "${ping}ms",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = when {
+                                        ping < 100 -> Color(0xFF10B981)
+                                        ping < 300 -> Color(0xFFF59E0B)
+                                        else -> Color(0xFFEF4444)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "انتخاب شده",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۲۲: اتصال خودکار در زمان روشن شدن گوشی (AutoConnect)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/receiver/
+  نام فایل: BootReceiver.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.receiver
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.service.V2RayVpnService
+
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            val autoConnect = MmkvManager.decodeSettings("auto_connect_on_boot", false)
+            if (autoConnect) {
+                val intentService = Intent(context, V2RayVpnService::class.java)
+                intentService.action = V2RayVpnService.ACTION_CONNECT
+                context.startService(intentService)
+            }
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۲۳: کاشی تنظیمات سریع (Quick Settings Tile)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/service/
+  نام فایل: VpnTileService.kt
+  توضیح: برای اندروید ۷ به بالا (API 24+)
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.service
+
+import android.content.Intent
+import android.graphics.drawable.Icon
+import android.service.quicksettings.Tile
+import android.service.quicksettings.TileService
+import com.v2ray.ang.R
+
+class VpnTileService : TileService() {
+
+    override fun onStartListening() {
+        super.onStartListening()
+        val tile = qsTile ?: return
+        tile.state = if (V2RayVpnService.isRunning) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.label = "VPN"
+        tile.icon = Icon.createWithResource(this, R.drawable.ic_stat_vpn)
+        tile.updateTile()
+    }
+
+    override fun onClick() {
+        super.onClick()
+        val intent = Intent(this, V2RayVpnService::class.java)
+        if (V2RayVpnService.isRunning) {
+            intent.action = V2RayVpnService.ACTION_DISCONNECT
+        } else {
+            intent.action = V2RayVpnService.ACTION_CONNECT
+        }
+        startService(intent)
+
+        val tile = qsTile ?: return
+        tile.state = if (V2RayVpnService.isRunning) Tile.STATE_INACTIVE else Tile.STATE_ACTIVE
+        tile.updateTile()
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۲۴: بهینه‌سازی باتری و اجرای پس‌زمینه (BatteryOptimization.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/util/
+  نام فایل: BatteryOptimization.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.util
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
+
+object BatteryOptimization {
+
+    fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+        }
+        return true
+    }
+
+    fun requestIgnoreBatteryOptimizations(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            intent.data = Uri.parse("package:${context.packageName}")
+            context.startActivity(intent)
+        }
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۲۵: سیستم آپدیت خودکار برنامه (In-App Update Checker)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/handler/
+  نام فایل: AppUpdateChecker.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.handler
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+
+object AppUpdateChecker {
+
+    // آدرس JSON نسخه جدید (روی گیت‌هاب یا سرور خود بسازید)
+    private const val VERSION_URL = "https://raw.githubusercontent.com/nimaxshat1392-alt/v2rayNG2233/main/version.json"
+
+    data class UpdateInfo(
+        val latestVersion: String,
+        val downloadUrl: String,
+        val changelog: String
+    )
+
+    suspend fun checkForUpdate(currentVersion: String): UpdateInfo? = withContext(Dispatchers.IO) {
+        try {
+            val url = URL(VERSION_URL)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 10000
+
+            val response = connection.inputStream.bufferedReader().readText()
+            val json = JSONObject(response)
+            val latestVersion = json.getString("version")
+            val downloadUrl = json.getString("url")
+            val changelog = json.getString("changelog")
+
+            if (latestVersion != currentVersion) {
+                UpdateInfo(latestVersion, downloadUrl, changelog)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun openDownloadLink(context: Context, url: String) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        context.startActivity(intent)
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۲۶: دیالوگ آپدیت زیبا (UpdateDialog.kt)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/components/
+  نام فایل: UpdateDialog.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.components
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.NewReleases
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun UpdateDialog(
+    latestVersion: String,
+    changelog: String,
+    onDismiss: () -> Unit,
+    onUpdate: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.NewReleases,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text(
+                "نسخه جدید موجود است!",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "نسخه $latestVersion در دسترس است.",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            "تغییرات:",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            changelog,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onUpdate,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Download, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("دانلود و نصب")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("بعداً")
+            }
+        }
+    )
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۲۷: فایل version.json برای آپدیت برنامه
+  مسیر: ریشه مخزن گیت‌هاب
+  نام فایل: version.json
+════════════════════════════════════════════════════════════════
+
+{
+  "version": "1.0.1",
+  "url": "https://github.com/nimaxshat1392-alt/v2rayNG2233/releases/download/v1.0.1/app-release.apk",
+  "changelog": "• بهبود رابط کاربری\n• افزودن تم AMOLED\n• رفع باگ اتصال\n• افزایش سرعت پینگ"
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۲۸: قوانین ProGuard برای مخفی‌سازی کد
+  مسیر: V2rayNG/app/proguard-rules.pro
+  توضیح: از دیده شدن کدهای اصلی توسط مهاجم جلوگیری می‌کند
+════════════════════════════════════════════════════════════════
+
+# حفظ کلاس‌های اصلی V2Ray
+-keep class com.v2ray.ang.** { *; }
+-keep class com.v2ray.ang.dto.** { *; }
+-keep class com.v2ray.ang.handler.** { *; }
+
+# حفظ کتابخانه‌های Go
+-keep class go.** { *; }
+-keep class libv2ray.** { *; }
+
+# حذف لاگ‌ها در نسخه Release
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+}
+
+# مخفی‌سازی نام متغیرها
+-obfuscationdictionary dict.txt
+-classobfuscationdictionary dict.txt
+-packageobfuscationdictionary dict.txt
+
+════════════════════════════════════════════════════════════════
+  بخش ۲۹: تنظیمات Gradle برای نسخه Release حرفه‌ای
+  مسیر: V2rayNG/app/build.gradle.kts
+  توضیح: این تنظیمات را در بخش android اضافه کنید
+════════════════════════════════════════════════════════════════
+
+buildTypes {
+    release {
+        isMinifyEnabled = true          // فعال‌سازی مخفی‌سازی کد
+        isShrinkResources = true        // حذف منابع استفاده نشده
+        proguardFiles(
+            getDefaultProguardFile("proguard-android-optimize.txt"),
+            "proguard-rules.pro"
+        )
+        signingConfig = signingConfigs.getByName("release")
+    }
+    debug {
+        isMinifyEnabled = false
+        applicationIdSuffix = ".debug"  // نصب همزمان نسخه دیباگ و ریلیز
+    }
+}
+
+// تنظیمات امضای دیجیتال
+signingConfigs {
+    create("release") {
+        storeFile = file("keystore/release.keystore")
+        storePassword = "YOUR_PASSWORD"
+        keyAlias = "YOUR_ALIAS"
+        keyPassword = "YOUR_KEY_PASSWORD"
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۳۰: صفحه Splash Screen زیبا
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/
+  نام فایل: SplashActivity.kt
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui
+
+import android.content.Intent
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import androidx.appcompat.app.AppCompatActivity
+import com.v2ray.ang.R
+import com.v2ray.ang.ui.main.MainActivity
+
+class SplashActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_splash)
+
+        // انیمیشن‌های Splash
+        val logo = findViewById<android.widget.ImageView>(R.id.splash_logo)
+        logo.alpha = 0f
+        logo.animate().alpha(1f).setDuration(1500).start()
+
+        // انتقال به صفحه اصلی بعد از ۲ ثانیه
+        Handler(Looper.getMainLooper()).postDelayed({
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+        }, 2000)
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۳۱: فایل XML مربوط به Splash Screen
+  مسیر: V2rayNG/app/src/main/res/layout/activity_splash.xml
+  نام فایل: activity_splash.xml
+════════════════════════════════════════════════════════════════
+
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/splash_background">
+
+    <ImageView
+        android:id="@+id/splash_logo"
+        android:layout_width="180dp"
+        android:layout_height="180dp"
+        android:layout_centerInParent="true"
+        android:src="@drawable/ic_launcher_foreground" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/splash_logo"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="24dp"
+        android:text="VPN Pro"
+        android:textColor="#FFFFFF"
+        android:textSize="28sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:l
+            android:layout_marginBottom="32dp"
+            android:text="نسخه ۱.۰.۰"
+            android:textColor="#B0B0B0"
+            android:textSize="14sp" />
+
+        </RelativeLayout>
+
+════════════════════════════════════════════════════════════════
+  بخش ۳۲: نکات نهایی برای حرفه‌ای‌تر شدن ظاهر
+════════════════════════════════════════════════════════════════
+
+۱. استفاده از فونت وزیرمتن (Vazirmatn) در پروژه:
+   - فایل فونت را در پوشه res/font قرار دهید.
+   - در Theme.kt فونت را به Typography اضافه کنید.
+
+۲. اضافه کردن افکت Ripple به همه دکمه‌ها:
+   - در MainActivity از Modifier.clickable با indication استفاده کنید.
+
+۳. تغییر رنگ نوار وضعیت (Status Bar):
+   - در Theme.kt در بخش WindowCompat.setDecorFitsSystemWindows(window, false)
+   - setStatusBarColor را حذف کنید تا رنگ پویا اعمال شود.
+
+۴. پیاده‌سازی Dark Mode خودکار:
+   - در SettingsFragment گزینه‌ای برای تغییر تم اضافه کنید.
+   - از DataStore برای ذخیره انتخاب کاربر استفاده کنید.
+
+۵. اضافه کردن Haptic Feedback (لرزش هنگام اتصال):
+   - در MainActivity از Vibrator API استفاده کنید.
+
+۶. انیمیشن Page Transition:
+   - در Jetpack Compose از AnimatedContent استفاده کنید.
+
+════════════════════════════════════════════════════════════════
+  بخش ۳۳: راه‌اندازی فونت اختصاصی (Vazirmatn Font)
+  مسیر: V2rayNG/app/src/main/res/font/vazirmatn.ttf
+  نام فایل: vazirmatn.ttf
+  توضیح: ابتدا فایل فونت را در این مسیر قرار دهید، سپس کد زیر را در Theme.kt اعمال کنید.
+════════════════════════════════════════════════════════════════
+
+// در فایل Theme.kt، این کد را به Typography اضافه کنید:
+
+val VazirFontFamily = FontFamily(
+    Font(R.font.vazirmatn, FontWeight.Normal),
+    Font(R.font.vazirmatn_bold, FontWeight.Bold),
+    Font(R.font.vazirmatn_medium, FontWeight.Medium)
+)
+
+val Typography = Typography(
+    displayLarge = TextStyle(fontFamily = VazirFontFamily),
+    displayMedium = TextStyle(fontFamily = VazirFontFamily),
+    displaySmall = TextStyle(fontFamily = VazirFontFamily),
+    headlineLarge = TextStyle(fontFamily = VazirFontFamily),
+    headlineMedium = TextStyle(fontFamily = VazirFontFamily),
+    headlineSmall = TextStyle(fontFamily = VazirFontFamily),
+    titleLarge = TextStyle(fontFamily = VazirFontFamily),
+    titleMedium = TextStyle(fontFamily = VazirFontFamily),
+    titleSmall = TextStyle(fontFamily = VazirFontFamily),
+    bodyLarge = TextStyle(fontFamily = VazirFontFamily),
+    bodyMedium = TextStyle(fontFamily = VazirFontFamily),
+    bodySmall = TextStyle(fontFamily = VazirFontFamily),
+    labelLarge = TextStyle(fontFamily = VazirFontFamily),
+    labelMedium = TextStyle(fontFamily = VazirFontFamily),
+    labelSmall = TextStyle(fontFamily = VazirFontFamily)
+)
+
+════════════════════════════════════════════════════════════════
+  بخش ۳۴: تاریخچه سرعت و پینگ (Speed History)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/handler/
+  نام فایل: SpeedHistoryManager.kt
+  توضیح: ذخیره و نمایش تاریخچه سرعت و پینگ سرورها
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.handler
+
+import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.util.MmkvManager
+import org.json.JSONArray
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.*
+
+object SpeedHistoryManager {
+
+    private const val HISTORY_KEY = "speed_history"
+
+    data class SpeedRecord(
+        val serverName: String,
+        val ping: Long,
+        val timestamp: Long,
+        val downloadSpeed: String,
+        val uploadSpeed: String
+    )
+
+    fun saveRecord(server: ProfileItem, ping: Long, download: String, upload: String) {
+        val history = getHistory().toMutableList()
+        history.add(
+            SpeedRecord(
+                serverName = server.remarks,
+                ping = ping,
+                timestamp = System.currentTimeMillis(),
+                downloadSpeed = download,
+                uploadSpeed = upload
+            )
+        )
+        // فقط ۵۰ رکورد آخر را نگه دار
+        if (history.size > 50) {
+            history.removeAt(0)
+        }
+        saveHistory(history)
+    }
+
+    fun getHistory(): List<SpeedRecord> {
+        val json = MmkvManager.decodeSettings(HISTORY_KEY, "[]")
+        val list = mutableListOf<SpeedRecord>()
+        try {
+            val array = JSONArray(json)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    SpeedRecord(
+                        serverName = obj.getString("serverName"),
+                        ping = obj.getLong("ping"),
+                        timestamp = obj.getLong("timestamp"),
+                        downloadSpeed = obj.getString("downloadSpeed"),
+                        uploadSpeed = obj.getString("uploadSpeed")
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return list
+    }
+
+    private fun saveHistory(history: List<SpeedRecord>) {
+        val array = JSONArray()
+        history.forEach { record ->
+            val obj = JSONObject().apply {
+                put("serverName", record.serverName)
+                put("ping", record.ping)
+                put("timestamp", record.timestamp)
+                put("downloadSpeed", record.downloadSpeed)
+                put("uploadSpeed", record.uploadSpeed)
+            }
+            array.put(obj)
+        }
+        MmkvManager.encodeSettings(HISTORY_KEY, array.toString())
+    }
+
+    fun formatTimestamp(timestamp: Long): String {
+        val sdf = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
+        return sdf.format(Date(timestamp))
+    }
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۳۵: اسکنر QR برای پنل ادمین (Admin QR Scanner)
+  مسیر: V2rayNG/app/src/main/java/com/v2ray/ang/ui/admin/
+  نام فایل: AdminQrScanner.kt
+  توضیح: برای اینکه مدیر بتواند به راحتی کانفیگ‌ها را با اسکن QR اضافه کند
+════════════════════════════════════════════════════════════════
+
+package com.v2ray.ang.ui.admin
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import java.util.concurrent.Executors
+
+class AdminQrScanner : ComponentActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.CAMERA), 100)
+        }
+
+        setContent {
+            MaterialTheme {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    CameraPreview(
+                        onQrScanned = { result ->
+                            // ارسال نتیجه به اکتیویتی قبلی
+                            val intent = intent.apply {
+                                putExtra("qr_result", result)
+                            }
+                            setResult(RESULT_OK, intent)
+                            finish()
+                        }
+                    )
+
+                    Text(
+                        "QR کد را در کادر قرار دهید",
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(24.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CameraPreview(onQrScanned: (String) -> Unit) {
+    val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
+
+    AndroidView(
+        factory = { ctx ->
+            val previewView = PreviewView(ctx)
+            val executor = Executors.newSingleThreadExecutor()
+
+            cameraProviderFuture.addListener({
+                val cameraProvider = cameraProviderFuture.get()
+
+                val preview = Preview.Builder().build().also {
+                    it.setSurfaceProvider(previewView.surfaceProvider)
+                }
+
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+
+                val scanner = BarcodeScanning.getClient()
+
+                imageAnalysis.setAnalyzer(executor) { imageProxy ->
+                    val mediaImage = imageProxy.image
+                    if (mediaImage != null) {
+                        val image = InputImage.fromMediaImage(
+                            mediaImage,
+                            imageProxy.imageInfo.rotationDegrees
+                        )
+                        scanner.process(image)
+                            .addOnSuccessListener { barcodes ->
+                                barcodes.firstOrNull()?.rawValue?.let { qr ->
+                                    onQrScanned(qr)
+                                }
+                            }
+                            .addOnCompleteListener {
+                                imageProxy.close()
+                            }
+                    }
+                }
+
+                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+                try {
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview,
+                        imageAnalysis
+                    )
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }, ContextCompat.getMainExecutor(context))
+
+            previewView
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
+════════════════════════════════════════════════════════════════
+  بخش ۳۶: راهنمای نهایی و چک‌لیست ساخت
+════════════════════════════════════════════════════════════════
+
+✅ چک‌لیست نهایی برای ساخت اپلیکیشن VPN اختصاصی:
+
+[ ] فایل configs.json را در ریشه مخزن بسازید.
+[ ] فایل version.json را برای آپدیت خودکار بسازید.
+[ ] فایل AdminPanelActivity.kt را در مسیر مشخص شده بسازید.
+[ ] فایل ConfigUpdater.kt را در پوشه handler بسازید.
+[ ] فایل SpeedtestManager.kt را در پوشه handler بسازید.
+[ ] فایل Theme.kt را در پوشه theme ویرایش کنید.
+[ ] فایل SettingsScreen.kt را در پوشه settings بسازید.
+[ ] فایل ThemeSelector.kt را در پوشه settings بسازید.
+[ ] فایل ConnectionCard.kt را در پوشه components بسازید.
+[ ] فایل ModernDashboard.kt را در پوشه dashboard بسازید.
+[ ] فایل AndroidManifest.xml را ویرایش کنید (ثبت Activityهای جدید).
+[ ] فایل build.gradle.kts را برای نسخه Release تنظیم کنید.
+[ ] فایل proguard-rules.pro را برای مخفی‌سازی کد تنظیم کنید.
+
+⚠️ نکات مهم:
+۱. قبل از ساخت نسخه Release، حتماً یک Keystore جدید بسازید.
+۲. برای تست اولیه از نسخه Debug استفاده کنید.
+۳. پس از نصب، با ۷ بار تپ روی عنوان به پنل ادمین دسترسی پیدا کنید (رمز: poiiu).
+۴. برای تغییر کانفیگ‌ها، فایل configs.json را در گیت‌هاب ویرایش کنید.
+۵. کاربران با زدن دکمه "آپدیت" در پنل ادمین، آخرین کانفیگ‌ها را دریافت می‌کنند.
+
+════════════════════════════════════════════════════════════════
+  پایان فایل MASTER_FIX_GUIDE.txt
+  با تشکر از همراهی شما. موفق باشید!
+════════════════════════════════════════════════════════════════
