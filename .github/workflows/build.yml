@@ -14,73 +14,148 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Apply Patch from MASTER_FIX_GUIDE.txt
+      - name: Create only NEW files (don't overwrite existing)
         run: |
-          python3 << 'PYEOF'
-          import re, os
+          BASE="$GITHUB_WORKSPACE/V2rayNG/app/src/main"
+          JAVA="$BASE/java/com/v2ray/ang"
+          mkdir -p "$JAVA/ui/admin" "$JAVA/handler"
 
-          with open('MASTER_FIX_GUIDE.txt', 'r', encoding='utf-8') as f:
-              content = f.read()
+          # ConfigUpdater - فقط اگر موجود نبود
+          if [ ! -f "$JAVA/handler/ConfigUpdater.kt" ]; then
+          cat > "$JAVA/handler/ConfigUpdater.kt" << 'KTEOF'
+          package com.v2ray.ang.handler
 
-          sep = '═' * 60
-          parts = content.split(sep)
-          created = 0
+          import kotlinx.coroutines.Dispatchers
+          import kotlinx.coroutines.withContext
+          import org.json.JSONArray
+          import java.net.HttpURLConnection
+          import java.net.URL
 
-          for i in range(1, len(parts) - 1, 2):
-              header = parts[i]
-              body = parts[i + 1]
+          object ConfigUpdater {
+              private const val CONFIG_URL = "https://raw.githubusercontent.com/nimaxshat1392-alt/v2rayNG2233/master/configs.json"
 
-              mp = re.search(r'مسیر:\s*(.+)', header)
-              mf = re.search(r'نام فایل:\s*(.+)', header)
-              if not mp or not mf:
-                  continue
+              suspend fun fetchRemoteConfigs(): List<String> = withContext(Dispatchers.IO) {
+                  try {
+                      val conn = URL(CONFIG_URL).openConnection() as HttpURLConnection
+                      conn.connectTimeout = 15000
+                      conn.readTimeout = 15000
+                      val resp = conn.inputStream.bufferedReader().readText()
+                      val arr = JSONArray(resp)
+                      val list = mutableListOf<String>()
+                      for (i in 0 until arr.length()) list.add(arr.getString(i))
+                      list
+                  } catch (e: Exception) { emptyList() }
+              }
+          }
+          KTEOF
+          fi
 
-              path = mp.group(1).strip()
-              filename = mf.group(1).strip()
+          # AdminPanelActivity - فقط اگر موجود نبود
+          if [ ! -f "$JAVA/ui/admin/AdminPanelActivity.kt" ]; then
+          cat > "$JAVA/ui/admin/AdminPanelActivity.kt" << 'KTEOF'
+          package com.v2ray.ang.ui.admin
 
-              if not path.startswith('V2rayNG/'):
-                  continue
-              if not (filename.endswith('.kt') or filename.endswith('.xml') or filename.endswith('.kts')):
-                  continue
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.setContent
+          import androidx.compose.foundation.layout.*
+          import androidx.compose.foundation.lazy.LazyColumn
+          import androidx.compose.foundation.lazy.items
+          import androidx.compose.foundation.shape.RoundedCornerShape
+          import androidx.compose.foundation.text.KeyboardOptions
+          import androidx.compose.material.icons.Icons
+          import androidx.compose.material.icons.filled.Delete
+          import androidx.compose.material3.*
+          import androidx.compose.runtime.*
+          import androidx.compose.ui.Alignment
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.text.font.FontWeight
+          import androidx.compose.ui.text.input.KeyboardType
+          import androidx.compose.ui.text.input.PasswordVisualTransformation
+          import androidx.compose.ui.unit.dp
+          import com.v2ray.ang.handler.ConfigUpdater
+          import com.v2ray.ang.handler.MmkvManager
+          import kotlinx.coroutines.launch
 
-              lines = body.split('\n')
-              start_idx = None
-              for idx, line in enumerate(lines):
-                  s = line.strip()
-                  if s.startswith('package') or s.startswith('<?xml') or s.startswith('import'):
-                      start_idx = idx
-                      break
-              if start_idx is None:
-                  continue
+          class AdminPanelActivity : ComponentActivity() {
+              private val ADMIN_PASSWORD = "poiiu"
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContent {
+                      MaterialTheme {
+                          var auth by remember { mutableStateOf(false) }
+                          if (!auth) AdminLogin { auth = true } else AdminContent()
+                      }
+                  }
+              }
+              @Composable private fun AdminLogin(onOk: () -> Unit) {
+                  var pass by remember { mutableStateOf("") }
+                  var err by remember { mutableStateOf(false) }
+                  Column(Modifier.fillMaxSize().padding(32.dp),
+                      horizontalAlignment = Alignment.CenterHorizontally,
+                      verticalArrangement = Arrangement.Center) {
+                      Text("ورود مدیر", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                      Spacer(Modifier.height(24.dp))
+                      OutlinedTextField(pass, { pass = it; err = false },
+                          label = { Text("رمز عبور") },
+                          visualTransformation = PasswordVisualTransformation(),
+                          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                          isError = err, singleLine = true)
+                      if (err) Text("رمز اشتباه", color = MaterialTheme.colorScheme.error)
+                      Spacer(Modifier.height(16.dp))
+                      Button({ if (pass == ADMIN_PASSWORD) onOk() else err = true }, Modifier.fillMaxWidth()) { Text("ورود") }
+                  }
+              }
+              @Composable fun AdminContent() {
+                  val scope = rememberCoroutineScope()
+                  var configs by remember { mutableStateOf(MmkvManager.decodeAllServerConfig().toList()) }
+                  var updating by remember { mutableStateOf(false) }
+                  Column(Modifier.padding(16.dp)) {
+                      Text("پنل مدیریت", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                      Spacer(Modifier.height(16.dp))
+                      Button({
+                          updating = true
+                          scope.launch {
+                              val remote = ConfigUpdater.fetchRemoteConfigs()
+                              if (remote.isNotEmpty()) {
+                                  MmkvManager.removeServerViaSubid("remote_configs")
+                                  com.v2ray.ang.handler.AngConfigManager.importBatchConfig(
+                                      remote.joinToString("\n"), "remote_configs", append = false)
+                                  configs = MmkvManager.decodeAllServerConfig().toList()
+                              }
+                              updating = false
+                          }
+                      }, Modifier.fillMaxWidth(), enabled = !updating) {
+                          Text(if (updating) "..." else "آپدیت کانفیگ")
+                      }
+                      Spacer(Modifier.height(16.dp))
+                      LazyColumn {
+                          items(configs) { c ->
+                              Card(Modifier.fillMaxWidth().padding(vertical = 4.dp), shape = RoundedCornerShape(12.dp)) {
+                                  Row(Modifier.fillMaxWidth().padding(12.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                                      Column(Modifier.weight(1f)) {
+                                          Text(c.remarks, fontWeight = FontWeight.Medium)
+                                          Text("${c.server}:${c.serverPort}", style = MaterialTheme.typography.bodySmall)
+                                      }
+                                      IconButton({ MmkvManager.removeServer(c.guid); configs = MmkvManager.decodeAllServerConfig().toList() }) {
+                                          Icon(Icons.Default.Delete, "حذف", tint = MaterialTheme.colorScheme.error)
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+          KTEOF
+          fi
 
-              code = '\n'.join(lines[start_idx:]).rstrip()
-              if len(code) < 100:
-                  continue
-
-              full = os.path.join(path, filename)
-              os.makedirs(os.path.dirname(full), exist_ok=True)
-              with open(full, 'w', encoding='utf-8') as f:
-                  f.write(code)
-              created += 1
-              print(f'✓ {full}')
-
-          print(f'\n✓ {created} files created from guide')
-          PYEOF
-
-      - name: Update AndroidManifest.xml
+      - name: Add Admin to Manifest
         run: |
-          MF="V2rayNG/app/src/main/AndroidManifest.xml"
+          MF="$GITHUB_WORKSPACE/V2rayNG/app/src/main/AndroidManifest.xml"
           if ! grep -q "AdminPanelActivity" "$MF"; then
             sed -i 's|</application>|    <activity android:name=".ui.admin.AdminPanelActivity" android:exported="false" android:label="Admin Panel" />\n    </application>|' "$MF"
           fi
-          echo "✓ Manifest updated"
-
-      - name: Create configs.json if missing
-        run: |
-          if [ ! -f "configs.json" ]; then
-            echo '["vless://4bdeee92-97e8-414d-bef6-ec1d5e2ab73b@5.157.10.148:443?security=reality&encryption=none&pbk=x6p656szvu_3CKLsJ4NtkooRvdTVGx7IoPca_p58_jA&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=surstreming.vvzzkontaktezzvv.garden&sid=fb442438e2223836#mlmvpn2570"]' > configs.json
-          fi
-          echo "✓ configs.json ready"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
