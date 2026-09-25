@@ -1,162 +1,105 @@
-name: Build APK
+name: Build VPN APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        required: false
-        type: string
   push:
-    branches:
-      - master
-
-permissions:
-  contents: write
+    branches: [ master ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v7
-      with:
-        submodules: 'recursive'
-        fetch-depth: '0'
-
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v4
-      with:
-        log-accepted-android-sdk-licenses: false
-        cmdline-tools-version: '14742923'
-        packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
-
-    - name: Install NDK
-      run: |
-        echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-          --channel=0 \
-          --install "ndk;29.0.14206865"
-        echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
-        sed -i '10i\
-        \
-            ndkVersion = "29.0.14206865"' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
-
-    - name: Restore cached libhevtun
-      id: cache-libhevtun-restore
-      uses: actions/cache/restore@v6
-      with:
-        path: ${{ github.workspace }}/libs
-        key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
-
-    - name: Build libhevtun
-      if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
-      run: |
-        bash compile-hevtun.sh
-    
-    - name: Save libhevtun
-      if: steps.cache-libhevtun-restore.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6
-      with:
-        path: ${{ github.workspace }}/libs
-        key: libhevtun-${{ runner.os }}-${{ env.NDK_HOME }}-${{ hashFiles('.git/modules/hev-socks5-tunnel/HEAD') }}-${{ hashFiles('compile-hevtun.sh') }}
-
-    - name: Copy libhevtun
-      run: |
-        cp -r ${{ github.workspace }}/libs ${{ github.workspace }}/V2rayNG/app
-
-    - name: Fetch AndroidLibXrayLite tag
-      run: |
-        pushd AndroidLibXrayLite
-        CURRENT_TAG=$(git describe --tags --abbrev=0)
-        echo "Current tag in this repo: $CURRENT_TAG"
-        echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
-        popd
-
-    - name: Download libv2ray
-      uses: robinraju/release-downloader@v1.13
-      with:
-        repository: '2dust/AndroidLibXrayLite'
-        tag: ${{ env.CURRENT_TAG }}
-        fileName: 'libv2ray.aar'
-        out-file-path: V2rayNG/app/libs/
-
-    - name: Setup Java
-      uses: actions/setup-java@v6.0.0
-      with:
-        distribution: 'temurin'
-        java-version: '21'
-
-    - name: Decode Keystore
-      uses: timheuer/base64-to-file@v2.0.0
-      id: android_keystore
-      with:
-        fileName: "android_keystore.jks"
-        encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
-
-    - name: Build APK
-      run: |
-        cd ${{ github.workspace }}/V2rayNG
-        echo "sdk.dir=${ANDROID_HOME}" > local.properties
-        chmod 755 gradlew
-        ./gradlew licenseFdroidReleaseReport
-        ./gradlew assembleRelease -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} -Pandroid.injected.signing.store.password=${{ secrets.APP_KEYSTORE_PASSWORD }} -Pandroid.injected.signing.key.alias=${{ secrets.APP_KEYSTORE_ALIAS }} -Pandroid.injected.signing.key.password=${{ secrets.APP_KEY_PASSWORD }}
-    
-    - name: Upload arm64-v8a APK
-      uses: actions/upload-artifact@v7
-      if: ${{  success() }}
-      with:
-        name: arm64-v8a
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*arm64-v8a*.apk
-
-    - name: Upload armeabi-v7a APK
-      uses: actions/upload-artifact@v7
-      if: ${{  success() }}
-      with:
-        name: armeabi-v7a
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*armeabi-v7a*.apk
-
-    - name: Upload x86 APK
-      uses: actions/upload-artifact@v7
-      if: ${{  success() }}
-      with:
-        name: x86-apk
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*x86*.apk
-
-    - name: Upload universal APK
-      uses: actions/upload-artifact@v7
-      if: ${{ success() }}
-      with:
-        name: universal-apk
-        path: ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*universal*.apk
-
-  sign-and-release:
-    needs: build
-    runs-on: ubuntu-26.04
-    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
-
-    steps:
-      - name: Download APK artifacts
-        uses: actions/download-artifact@v8
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          path: release
+          submodules: recursive
 
-      - name: Sign APK files
+      - name: Apply Patch from MASTER_FIX_GUIDE.txt
         run: |
-          printf '%s' "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
-          KEY=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
-          mkdir -p release-files
+          python3 << 'PYEOF'
+          import re, os
 
-          find release -type f -name '*.apk' | while read apk; do
-            cp "$apk" release-files/
-            gpg --batch --yes --local-user "$KEY" --detach-sign --output "release-files/$(basename "$apk").sig" "$apk"
-          done
+          with open('MASTER_FIX_GUIDE.txt', 'r', encoding='utf-8') as f:
+              content = f.read()
 
-          gpg --armor --export "$KEY" > release-files/v2rayN-public-key.asc
+          sep = '═' * 60
+          parts = content.split(sep)
+          created = 0
 
-      - name: Upload APKs, signatures and public key to release
-        uses: svenstaro/upload-release-action@v2
+          for i in range(1, len(parts) - 1, 2):
+              header = parts[i]
+              body = parts[i + 1]
+
+              mp = re.search(r'مسیر:\s*(.+)', header)
+              mf = re.search(r'نام فایل:\s*(.+)', header)
+              if not mp or not mf:
+                  continue
+
+              path = mp.group(1).strip()
+              filename = mf.group(1).strip()
+
+              if not path.startswith('V2rayNG/'):
+                  continue
+              if not (filename.endswith('.kt') or filename.endswith('.xml') or filename.endswith('.kts')):
+                  continue
+
+              lines = body.split('\n')
+              start_idx = None
+              for idx, line in enumerate(lines):
+                  s = line.strip()
+                  if s.startswith('package') or s.startswith('<?xml') or s.startswith('import'):
+                      start_idx = idx
+                      break
+              if start_idx is None:
+                  continue
+
+              code = '\n'.join(lines[start_idx:]).rstrip()
+              if len(code) < 100:
+                  continue
+
+              full = os.path.join(path, filename)
+              os.makedirs(os.path.dirname(full), exist_ok=True)
+              with open(full, 'w', encoding='utf-8') as f:
+                  f.write(code)
+              created += 1
+              print(f'✓ {full}')
+
+          print(f'\n✓ {created} files created from guide')
+          PYEOF
+
+      - name: Update AndroidManifest.xml
+        run: |
+          MF="V2rayNG/app/src/main/AndroidManifest.xml"
+          if ! grep -q "AdminPanelActivity" "$MF"; then
+            sed -i 's|</application>|    <activity android:name=".ui.admin.AdminPanelActivity" android:exported="false" android:label="Admin Panel" />\n    </application>|' "$MF"
+          fi
+          echo "✓ Manifest updated"
+
+      - name: Create configs.json if missing
+        run: |
+          if [ ! -f "configs.json" ]; then
+            echo '["vless://4bdeee92-97e8-414d-bef6-ec1d5e2ab73b@5.157.10.148:443?security=reality&encryption=none&pbk=x6p656szvu_3CKLsJ4NtkooRvdTVGx7IoPca_p58_jA&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=surstreming.vvzzkontaktezzvv.garden&sid=fb442438e2223836#mlmvpn2570"]' > configs.json
+          fi
+          echo "✓ configs.json ready"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          file: release-files/*
-          tag: ${{ inputs.release_tag }}
-          file_glob: true
-          prerelease: true
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x V2rayNG/gradlew
+
+      - name: Build Debug APK
+        run: |
+          cd V2rayNG
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-apk
+          path: V2rayNG/app/build/outputs/apk/debug/*.apk
