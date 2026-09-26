@@ -293,4 +293,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vpn-apk
-          path: V2rayNG/app/build/outputs/apk/debug/*.apk
+          path: V2rayNG/app/build/outputs/apk/**/*.apk
