@@ -49,7 +49,7 @@ jobs:
           cd AndroidLibXrayLite
           go mod download
           gomobile init
-          gomobile bind -v -androidapi 21 -o ../V2rayNG/app/libs/libv2ray.aar .
+          gomobile bind -v -androidapi 21 -ldflags="-checklinkname=0" -o ../V2rayNG/app/libs/libv2ray.aar .
           ls -la ../V2rayNG/app/libs/
 
       - name: Add material-icons dependency
