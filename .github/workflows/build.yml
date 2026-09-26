@@ -44,7 +44,7 @@ jobs:
           go install golang.org/x/mobile/cmd/gobind@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      - name: Build libv2ray.aar
+      - name: Build libv2ray.aar (arm64 only)
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
           export GOFLAGS="-ldflags=-checklinkname=0"
@@ -52,7 +52,7 @@ jobs:
           mkdir -p ../V2rayNG/app/libs
           go mod download
           gomobile init
-          gomobile bind -v -androidapi 21 -o ../V2rayNG/app/libs/libv2ray.aar .
+          gomobile bind -v -androidapi 21 -target=android/arm64 -o ../V2rayNG/app/libs/libv2ray.aar .
           ls -la ../V2rayNG/app/libs/
 
       - name: Add material-icons dependency
@@ -62,6 +62,21 @@ jobs:
             sed -i 's|dependencies {|dependencies {\n    implementation("androidx.compose.material:material-icons-extended")|' "$BUILD_FILE"
           fi
           echo "Dependencies updated"
+
+      - name: Limit ABIs to arm64-v8a
+        run: |
+          BUILD_FILE="V2rayNG/app/build.gradle.kts"
+          # غیرفعال کردن ABI splits و فقط arm64
+          if grep -q "splits {" "$BUILD_FILE"; then
+            # اگه splits از قبل هست، فقط include رو تغییر میدیم
+            sed -i 's|include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")|include("arm64-v8a")|' "$BUILD_FILE" || true
+            sed -i "s|include(\"arm64-v8a\", \"armeabi-v7a\")|include(\"arm64-v8a\")|" "$BUILD_FILE" || true
+          fi
+          # اضافه کردن ndk abiFilters برای اطمینان
+          if ! grep -q "abiFilters" "$BUILD_FILE"; then
+            sed -i 's|defaultConfig {|defaultConfig {\n        ndk {\n            abiFilters.add("arm64-v8a")\n        }|' "$BUILD_FILE"
+          fi
+          echo "ABI limited to arm64-v8a"
 
       - name: Create Kotlin Files
         run: |
@@ -283,9 +298,10 @@ jobs:
       - name: Grant execute permission
         run: chmod +x V2rayNG/gradlew
 
-      - name: Build Debug APK
+      - name: Build Debug APK (arm64 only)
         run: |
           cd V2rayNG
+          ./gradlew assembleFossDebug -Pandroid.injected.build.abi=arm64-v8a --stacktrace || \
           ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
@@ -293,4 +309,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vpn-apk
-          path: V2rayNG/app/build/outputs/apk/**/*.apk
+          path: V2rayNG/app/build/outputs/apk/**/*arm64*.apk
