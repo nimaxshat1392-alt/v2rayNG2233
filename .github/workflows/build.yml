@@ -15,11 +15,39 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Force init submodules
+        run: |
+          git submodule update --init --recursive || true
+          echo "=== AndroidLibXrayLite content ==="
+          ls -la AndroidLibXrayLite/ || echo "empty"
+          echo "=== Check for gradlew ==="
+          find AndroidLibXrayLite -name gradlew -type f || echo "no gradlew found"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+
+      - name: Clone AndroidLibXrayLite if empty
+        run: |
+          if [ ! -f "AndroidLibXrayLite/gradlew" ]; then
+            echo "AndroidLibXrayLite is empty - cloning directly"
+            rm -rf AndroidLibXrayLite
+            git clone --depth 1 https://github.com/2dust/AndroidLibXrayLite.git AndroidLibXrayLite
+          fi
+          ls -la AndroidLibXrayLite/
+          ls -la AndroidLibXrayLite/gradlew
+
+      - name: Build libv2ray AAR
+        run: |
+          cd AndroidLibXrayLite
+          chmod +x gradlew
+          ./gradlew clean assembleRelease --stacktrace
+          find . -name "*.aar" -type f
+          mkdir -p ../V2rayNG/app/libs
+          find . -name "libv2ray*.aar" -exec cp {} ../V2rayNG/app/libs/libv2ray.aar \;
+          ls -la ../V2rayNG/app/libs/
 
       - name: Add material-icons dependency
         run: |
@@ -216,7 +244,9 @@ jobs:
                       Row(verticalAlignment = Alignment.CenterVertically) {
                           Surface(Modifier.size(56.dp), shape = RoundedCornerShape(16.dp),
                               color = Color.White.copy(alpha = 0.2f)) {
-                              Box(Alignment.Center) { Text(flag, style = MaterialTheme.typography.headlineMedium) }
+                              Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                  Text(flag, style = MaterialTheme.typography.headlineMedium)
+                              }
                           }
                           Spacer(Modifier.width(16.dp))
                           Column(Modifier.weight(1f)) {
@@ -258,3 +288,5 @@ jobs:
         with:
           name: vpn-apk
           path: V2rayNG/app/build/outputs/apk/debug/*.apk
+
+          
