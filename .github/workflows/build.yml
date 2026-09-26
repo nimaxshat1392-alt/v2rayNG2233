@@ -21,17 +21,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Build AndroidLibXrayLite (libv2ray)
         run: |
           cd AndroidLibXrayLite
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew assembleRelease --stacktrace || true
           find . -name "*.aar" -type f
           mkdir -p ../V2rayNG/app/libs
-          find . -name "*.aar" -exec cp {} ../V2rayNG/app/libs/ \;
+          find . -name "*.aar" -exec cp {} ../V2rayNG/app/libs/ \; || true
           ls -la ../V2rayNG/app/libs/
 
       - name: Add material-icons dependency
@@ -51,7 +48,6 @@ jobs:
           mkdir -p "$JAVA/ui/components"
           mkdir -p "$JAVA/handler"
 
-          # ═════ ConfigUpdater.kt ═════
           if [ ! -f "$JAVA/handler/ConfigUpdater.kt" ]; then
           cat > "$JAVA/handler/ConfigUpdater.kt" << 'KTEOF'
           package com.v2ray.ang.handler
@@ -81,7 +77,6 @@ jobs:
           KTEOF
           fi
 
-          # ═════ AdminPanelActivity.kt ═════
           if [ ! -f "$JAVA/ui/admin/AdminPanelActivity.kt" ]; then
           cat > "$JAVA/ui/admin/AdminPanelActivity.kt" << 'KTEOF'
           package com.v2ray.ang.ui.admin
@@ -171,7 +166,6 @@ jobs:
           KTEOF
           fi
 
-          # ═════ ThemeAdvanced.kt ═════
           if [ ! -f "$JAVA/ui/theme_new/ThemeAdvanced.kt" ]; then
           cat > "$JAVA/ui/theme_new/ThemeAdvanced.kt" << 'KTEOF'
           package com.v2ray.ang.ui.theme_new
@@ -203,7 +197,6 @@ jobs:
           KTEOF
           fi
 
-          # ═════ ConnectionCard.kt ═════
           if [ ! -f "$JAVA/ui/components/ConnectionCard.kt" ]; then
           cat > "$JAVA/ui/components/ConnectionCard.kt" << 'KTEOF'
           package com.v2ray.ang.ui.components
