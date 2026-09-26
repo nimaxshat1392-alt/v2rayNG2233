@@ -9,12 +9,40 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create All Files
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build AndroidLibXrayLite (libv2ray)
+        run: |
+          cd AndroidLibXrayLite
+          chmod +x gradlew
+          ./gradlew assembleRelease --stacktrace
+          find . -name "*.aar" -type f
+          mkdir -p ../V2rayNG/app/libs
+          find . -name "*.aar" -exec cp {} ../V2rayNG/app/libs/ \;
+          ls -la ../V2rayNG/app/libs/
+
+      - name: Add material-icons dependency
+        run: |
+          BUILD_FILE="V2rayNG/app/build.gradle.kts"
+          if ! grep -q "material-icons-extended" "$BUILD_FILE"; then
+            sed -i 's|dependencies {|dependencies {\n    implementation("androidx.compose.material:material-icons-extended")|' "$BUILD_FILE"
+          fi
+          echo "Dependencies updated"
+
+      - name: Create Kotlin Files
         run: |
           BASE="$GITHUB_WORKSPACE/V2rayNG/app/src/main"
           JAVA="$BASE/java/com/v2ray/ang"
@@ -23,7 +51,7 @@ jobs:
           mkdir -p "$JAVA/ui/components"
           mkdir -p "$JAVA/handler"
 
-          # ConfigUpdater.kt
+          # ═════ ConfigUpdater.kt ═════
           if [ ! -f "$JAVA/handler/ConfigUpdater.kt" ]; then
           cat > "$JAVA/handler/ConfigUpdater.kt" << 'KTEOF'
           package com.v2ray.ang.handler
@@ -53,7 +81,7 @@ jobs:
           KTEOF
           fi
 
-          # AdminPanelActivity.kt
+          # ═════ AdminPanelActivity.kt ═════
           if [ ! -f "$JAVA/ui/admin/AdminPanelActivity.kt" ]; then
           cat > "$JAVA/ui/admin/AdminPanelActivity.kt" << 'KTEOF'
           package com.v2ray.ang.ui.admin
@@ -143,7 +171,7 @@ jobs:
           KTEOF
           fi
 
-          # ThemeAdvanced.kt
+          # ═════ ThemeAdvanced.kt ═════
           if [ ! -f "$JAVA/ui/theme_new/ThemeAdvanced.kt" ]; then
           cat > "$JAVA/ui/theme_new/ThemeAdvanced.kt" << 'KTEOF'
           package com.v2ray.ang.ui.theme_new
@@ -175,7 +203,7 @@ jobs:
           KTEOF
           fi
 
-          # ConnectionCard.kt
+          # ═════ ConnectionCard.kt ═════
           if [ ! -f "$JAVA/ui/components/ConnectionCard.kt" ]; then
           cat > "$JAVA/ui/components/ConnectionCard.kt" << 'KTEOF'
           package com.v2ray.ang.ui.components
@@ -230,14 +258,8 @@ jobs:
           MF="$GITHUB_WORKSPACE/V2rayNG/app/src/main/AndroidManifest.xml"
           if ! grep -q "AdminPanelActivity" "$MF"; then
             sed -i 's|</application>|    <activity android:name=".ui.admin.AdminPanelActivity" android:exported="false" android:label="Admin" />\n    </application>|' "$MF"
+            echo "Admin added to Manifest"
           fi
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: gradle
 
       - name: Grant execute permission
         run: chmod +x V2rayNG/gradlew
