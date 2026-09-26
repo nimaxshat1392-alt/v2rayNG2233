@@ -1,4 +1,4 @@
-name: Build VPN APK
+name: Build Pro VPN
 
 on:
   push:
@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -21,73 +21,92 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r26b
-
-      - name: Clone AndroidLibXrayLite
+      - name: Download libv2ray AAR
         run: |
-          rm -rf AndroidLibXrayLite
-          git clone --depth 1 https://github.com/2dust/AndroidLibXrayLite.git AndroidLibXrayLite
-          ls -la AndroidLibXrayLite/
+          mkdir -p V2rayNG/app/libs
+          cd V2rayNG/app/libs
+          curl -L -o libv2ray.aar "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar" || echo "download failed"
+          ls -la
 
-      - name: Install gomobile
-        run: |
-          go env -w GOFLAGS=-ldflags=-checklinkname=0
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          go install golang.org/x/mobile/cmd/gobind@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
-
-      - name: Build libv2ray.aar (arm64 only)
-        run: |
-          export PATH=$PATH:$(go env GOPATH)/bin
-          export GOFLAGS="-ldflags=-checklinkname=0"
-          cd AndroidLibXrayLite
-          mkdir -p ../V2rayNG/app/libs
-          go mod download
-          gomobile init
-          gomobile bind -v -androidapi 21 -target=android/arm64 -o ../V2rayNG/app/libs/libv2ray.aar .
-          ls -la ../V2rayNG/app/libs/
-
-      - name: Add material-icons dependency
+      - name: Add Compose dependencies
         run: |
           BUILD_FILE="V2rayNG/app/build.gradle.kts"
           if ! grep -q "material-icons-extended" "$BUILD_FILE"; then
-            sed -i 's|dependencies {|dependencies {\n    implementation("androidx.compose.material:material-icons-extended")|' "$BUILD_FILE"
+            sed -i 's|dependencies {|dependencies {\n    implementation("androidx.compose.material:material-icons-extended")\n    implementation("androidx.compose.animation:animation:1.7.6")|' "$BUILD_FILE"
           fi
           echo "Dependencies updated"
 
-      - name: Limit ABIs to arm64-v8a
+      - name: Rename app
         run: |
-          BUILD_FILE="V2rayNG/app/build.gradle.kts"
-          # غیرفعال کردن ABI splits و فقط arm64
-          if grep -q "splits {" "$BUILD_FILE"; then
-            # اگه splits از قبل هست، فقط include رو تغییر میدیم
-            sed -i 's|include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")|include("arm64-v8a")|' "$BUILD_FILE" || true
-            sed -i "s|include(\"arm64-v8a\", \"armeabi-v7a\")|include(\"arm64-v8a\")|" "$BUILD_FILE" || true
+          STRINGS="V2rayNG/app/src/main/res/values/strings.xml"
+          if [ -f "$STRINGS" ]; then
+            sed -i 's|<string name="app_name">.*</string>|<string name="app_name">Pro VPN</string>|' "$STRINGS"
           fi
-          # اضافه کردن ndk abiFilters برای اطمینان
-          if ! grep -q "abiFilters" "$BUILD_FILE"; then
-            sed -i 's|defaultConfig {|defaultConfig {\n        ndk {\n            abiFilters.add("arm64-v8a")\n        }|' "$BUILD_FILE"
-          fi
-          echo "ABI limited to arm64-v8a"
 
-      - name: Create Kotlin Files
+      - name: Create Theme file
         run: |
-          BASE="$GITHUB_WORKSPACE/V2rayNG/app/src/main"
-          JAVA="$BASE/java/com/v2ray/ang"
-          mkdir -p "$JAVA/ui/admin"
-          mkdir -p "$JAVA/ui/theme_new"
-          mkdir -p "$JAVA/ui/components"
+          JAVA="$GITHUB_WORKSPACE/V2rayNG/app/src/main/java/com/v2ray/ang"
+          mkdir -p "$JAVA/ui/theme"
+          cat > "$JAVA/ui/theme/VpnTheme.kt" << 'KTEOF'
+          package com.v2ray.ang.ui.theme
+
+          import androidx.compose.material3.darkColorScheme
+          import androidx.compose.material3.lightColorScheme
+          import androidx.compose.ui.graphics.Color
+
+          val AmoledColors = darkColorScheme(
+              primary = Color(0xFF00E5FF),
+              onPrimary = Color(0xFF000000),
+              primaryContainer = Color(0xFF00363D),
+              secondary = Color(0xFFB388FF),
+              background = Color(0xFF000000),
+              surface = Color(0xFF0A0A0A),
+              onBackground = Color(0xFFE0E0E0),
+              onSurface = Color(0xFFE0E0E0),
+              error = Color(0xFFFF5252)
+          )
+
+          val CyberpunkColors = darkColorScheme(
+              primary = Color(0xFFFF00FF),
+              onPrimary = Color(0xFF000000),
+              secondary = Color(0xFF00FFFF),
+              background = Color(0xFF0D0221),
+              surface = Color(0xFF1A0B2E),
+              onBackground = Color(0xFFE0E0E0),
+              onSurface = Color(0xFFE0E0E0)
+          )
+
+          val ProDarkColors = darkColorScheme(
+              primary = Color(0xFF64B5F6),
+              onPrimary = Color(0xFF000000),
+              background = Color(0xFF121212),
+              surface = Color(0xFF1E1E1E),
+              onBackground = Color(0xFFE0E0E0),
+              onSurface = Color(0xFFE0E0E0)
+          )
+
+          val MinimalLightColors = lightColorScheme(
+              primary = Color(0xFF2E7D32),
+              onPrimary = Color(0xFFFFFFFF),
+              background = Color(0xFFF5F5F5),
+              surface = Color(0xFFFFFFFF),
+              onBackground = Color(0xFF212121),
+              onSurface = Color(0xFF212121)
+          )
+
+          fun getColorScheme(themeMode: String, isDark: Boolean) = when (themeMode) {
+              "amoled" -> AmoledColors
+              "cyberpunk" -> CyberpunkColors
+              "dark" -> ProDarkColors
+              "light" -> MinimalLightColors
+              else -> if (isDark) ProDarkColors else MinimalLightColors
+          }
+          KTEOF
+
+      - name: Create ConfigUpdater
+        run: |
+          JAVA="$GITHUB_WORKSPACE/V2rayNG/app/src/main/java/com/v2ray/ang"
           mkdir -p "$JAVA/handler"
-
-          if [ ! -f "$JAVA/handler/ConfigUpdater.kt" ]; then
           cat > "$JAVA/handler/ConfigUpdater.kt" << 'KTEOF'
           package com.v2ray.ang.handler
 
@@ -105,6 +124,7 @@ jobs:
                       val conn = URL(CONFIG_URL).openConnection() as HttpURLConnection
                       conn.connectTimeout = 15000
                       conn.readTimeout = 15000
+                      conn.setRequestProperty("User-Agent", "ProVPN/1.0")
                       val resp = conn.inputStream.bufferedReader().readText()
                       val arr = JSONArray(resp)
                       val list = mutableListOf<String>()
@@ -114,29 +134,40 @@ jobs:
               }
           }
           KTEOF
-          fi
 
-          if [ ! -f "$JAVA/ui/admin/AdminPanelActivity.kt" ]; then
+      - name: Create AdminPanelActivity
+        run: |
+          JAVA="$GITHUB_WORKSPACE/V2rayNG/app/src/main/java/com/v2ray/ang"
+          mkdir -p "$JAVA/ui/admin"
           cat > "$JAVA/ui/admin/AdminPanelActivity.kt" << 'KTEOF'
           package com.v2ray.ang.ui.admin
 
           import android.os.Bundle
           import androidx.activity.ComponentActivity
           import androidx.activity.compose.setContent
+          import androidx.compose.foundation.background
           import androidx.compose.foundation.layout.*
+          import androidx.compose.foundation.lazy.LazyColumn
+          import androidx.compose.foundation.lazy.items
           import androidx.compose.foundation.shape.RoundedCornerShape
           import androidx.compose.foundation.text.KeyboardOptions
           import androidx.compose.material.icons.Icons
-          import androidx.compose.material.icons.filled.Refresh
+          import androidx.compose.material.icons.filled.AdminPanelSettings
+          import androidx.compose.material.icons.filled.CloudDownload
+          import androidx.compose.material.icons.filled.Delete
           import androidx.compose.material3.*
           import androidx.compose.runtime.*
           import androidx.compose.ui.Alignment
           import androidx.compose.ui.Modifier
+          import androidx.compose.ui.graphics.Brush
+          import androidx.compose.ui.graphics.Color
           import androidx.compose.ui.text.font.FontWeight
           import androidx.compose.ui.text.input.KeyboardType
           import androidx.compose.ui.text.input.PasswordVisualTransformation
           import androidx.compose.ui.unit.dp
+          import com.v2ray.ang.handler.AngConfigManager
           import com.v2ray.ang.handler.ConfigUpdater
+          import com.v2ray.ang.handler.MmkvManager
           import kotlinx.coroutines.launch
 
           class AdminPanelActivity : ComponentActivity() {
@@ -152,161 +183,241 @@ jobs:
                   }
               }
 
-              @Composable private fun AdminLogin(onOk: () -> Unit) {
+              @Composable
+              private fun AdminLogin(onOk: () -> Unit) {
                   var pass by remember { mutableStateOf("") }
                   var err by remember { mutableStateOf(false) }
-                  Column(Modifier.fillMaxSize().padding(32.dp),
-                      horizontalAlignment = Alignment.CenterHorizontally,
-                      verticalArrangement = Arrangement.Center) {
-                      Text("ورود مدیر", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                      Spacer(Modifier.height(24.dp))
-                      OutlinedTextField(pass, { pass = it; err = false },
-                          label = { Text("رمز عبور") },
-                          visualTransformation = PasswordVisualTransformation(),
-                          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                          isError = err, singleLine = true)
-                      if (err) Text("رمز اشتباه", color = MaterialTheme.colorScheme.error)
-                      Spacer(Modifier.height(16.dp))
-                      Button({ if (pass == ADMIN_PASSWORD) onOk() else err = true },
-                          Modifier.fillMaxWidth()) { Text("ورود") }
+                  Box(
+                      Modifier.fillMaxSize().background(
+                          Brush.verticalGradient(listOf(Color(0xFF0F172A), Color(0xFF020617)))
+                      ),
+                      contentAlignment = Alignment.Center
+                  ) {
+                      Card(Modifier.fillMaxWidth(0.9f).padding(16.dp), shape = RoundedCornerShape(24.dp)) {
+                          Column(Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                              Surface(
+                                  Modifier.size(72.dp),
+                                  shape = RoundedCornerShape(20.dp),
+                                  color = MaterialTheme.colorScheme.primaryContainer
+                              ) {
+                                  Box(contentAlignment = Alignment.Center) {
+                                      Icon(Icons.Default.AdminPanelSettings, null,
+                                          Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                                  }
+                              }
+                              Spacer(Modifier.height(20.dp))
+                              Text("ورود مدیر", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                              Spacer(Modifier.height(8.dp))
+                              Text("این بخش محدود به مدیر است",
+                                  style = MaterialTheme.typography.bodyMedium,
+                                  color = MaterialTheme.colorScheme.onSurfaceVariant)
+                              Spacer(Modifier.height(24.dp))
+                              OutlinedTextField(pass, { pass = it; err = false },
+                                  label = { Text("رمز عبور") },
+                                  visualTransformation = PasswordVisualTransformation(),
+                                  keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                  isError = err, singleLine = true,
+                                  modifier = Modifier.fillMaxWidth(),
+                                  shape = RoundedCornerShape(12.dp))
+                              if (err) {
+                                  Spacer(Modifier.height(4.dp))
+                                  Text("رمز اشتباه", color = MaterialTheme.colorScheme.error)
+                              }
+                              Spacer(Modifier.height(16.dp))
+                              Button({ if (pass == ADMIN_PASSWORD) onOk() else err = true },
+                                  Modifier.fillMaxWidth().height(52.dp),
+                                  shape = RoundedCornerShape(12.dp)) { Text("ورود") }
+                          }
+                      }
                   }
               }
 
-              @Composable fun AdminContent() {
+              @Composable
+              fun AdminContent() {
                   val scope = rememberCoroutineScope()
+                  var configs by remember { mutableStateOf(MmkvManager.decodeAllServerConfig().toList()) }
                   var updating by remember { mutableStateOf(false) }
                   var status by remember { mutableStateOf("") }
-                  Column(Modifier.padding(16.dp)) {
-                      Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                          Column(Modifier.padding(16.dp)) {
+
+                  Column(Modifier.fillMaxSize().padding(16.dp)) {
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                          Icon(Icons.Default.AdminPanelSettings, null, Modifier.size(32.dp),
+                              tint = MaterialTheme.colorScheme.primary)
+                          Spacer(Modifier.width(12.dp))
+                          Column {
                               Text("پنل مدیریت", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                              if (status.isNotEmpty()) {
-                                  Spacer(Modifier.height(8.dp))
-                                  Text(status, style = MaterialTheme.typography.bodySmall)
-                              }
+                              Text("${configs.size} کانفیگ", style = MaterialTheme.typography.bodySmall)
                           }
                       }
                       Spacer(Modifier.height(16.dp))
-                      Button({
-                          updating = true
-                          status = "در حال دریافت..."
-                          scope.launch {
-                              val r = ConfigUpdater.fetchRemoteConfigs()
-                              status = if (r.isNotEmpty()) "دریافت ${r.size} کانفیگ موفق" else "خطا در دریافت"
-                              updating = false
+                      Button(
+                          {
+                              updating = true
+                              status = "در حال دریافت..."
+                              scope.launch {
+                                  val remote = ConfigUpdater.fetchRemoteConfigs()
+                                  if (remote.isNotEmpty()) {
+                                      MmkvManager.removeServerViaSubid("remote_configs")
+                                      AngConfigManager.importBatchConfig(
+                                          remote.joinToString("\n"),
+                                          "remote_configs",
+                                          append = false
+                                      )
+                                      configs = MmkvManager.decodeAllServerConfig().toList()
+                                      status = "دریافت ${remote.size} کانفیگ موفق"
+                                  } else {
+                                      status = "خطا در دریافت"
+                                  }
+                                  updating = false
+                              }
+                          },
+                          Modifier.fillMaxWidth().height(52.dp),
+                          enabled = !updating,
+                          shape = RoundedCornerShape(12.dp)
+                      ) {
+                          Icon(Icons.Default.CloudDownload, null)
+                          Spacer(Modifier.width(8.dp))
+                          Text(if (updating) "..." else "آپدیت کانفیگ از سرور")
+                      }
+                      if (status.isNotEmpty()) {
+                          Spacer(Modifier.height(8.dp))
+                          Text(status, style = MaterialTheme.typography.bodySmall,
+                              color = MaterialTheme.colorScheme.primary)
+                      }
+                      Spacer(Modifier.height(16.dp))
+                      LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                          items(configs) { c ->
+                              Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                                  Row(Modifier.fillMaxWidth().padding(12.dp),
+                                      Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                                      Column(Modifier.weight(1f)) {
+                                          Text(c.remarks.ifEmpty { "بدون نام" }, fontWeight = FontWeight.Medium)
+                                          Text("${c.server}:${c.serverPort}",
+                                              style = MaterialTheme.typography.bodySmall,
+                                              color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                      }
+                                      IconButton({
+                                          MmkvManager.removeServer(c.guid)
+                                          configs = MmkvManager.decodeAllServerConfig().toList()
+                                      }) {
+                                          Icon(Icons.Default.Delete, "حذف", tint = MaterialTheme.colorScheme.error)
+                                      }
+                                  }
+                              }
                           }
-                      }, Modifier.fillMaxWidth(), enabled = !updating) {
-                          Icon(Icons.Default.Refresh, null); Spacer(Modifier.width(8.dp))
-                          Text(if (updating) "..." else "آپدیت کانفیگ")
                       }
                   }
               }
           }
           KTEOF
-          fi
 
-          if [ ! -f "$JAVA/ui/theme_new/ThemeAdvanced.kt" ]; then
-          cat > "$JAVA/ui/theme_new/ThemeAdvanced.kt" << 'KTEOF'
-          package com.v2ray.ang.ui.theme_new
+      - name: Create HomeActivity
+        run: |
+          JAVA="$GITHUB_WORKSPACE/V2rayNG/app/src/main/java/com/v2ray/ang"
+          mkdir -p "$JAVA/ui/home"
+          cat > "$JAVA/ui/home/HomeActivity.kt" << 'KTEOF'
+          package com.v2ray.ang.ui.home
 
-          import androidx.compose.material3.darkColorScheme
-          import androidx.compose.material3.lightColorScheme
-          import androidx.compose.ui.graphics.Color
-
-          val AmoledColors = darkColorScheme(
-              primary = Color(0xFF00E5FF),
-              background = Color(0xFF000000),
-              surface = Color(0xFF0A0A0A),
-              onBackground = Color(0xFFE0E0E0),
-              onSurface = Color(0xFFE0E0E0)
-          )
-
-          val CyberpunkColors = darkColorScheme(
-              primary = Color(0xFFFF00FF),
-              secondary = Color(0xFF00FFFF),
-              background = Color(0xFF0D0221),
-              surface = Color(0xFF1A0B2E)
-          )
-
-          val LightMinimal = lightColorScheme(
-              primary = Color(0xFF2E7D32),
-              background = Color(0xFFF5F5F5),
-              surface = Color(0xFFFFFFFF)
-          )
-          KTEOF
-          fi
-
-          if [ ! -f "$JAVA/ui/components/ConnectionCard.kt" ]; then
-          cat > "$JAVA/ui/components/ConnectionCard.kt" << 'KTEOF'
-          package com.v2ray.ang.ui.components
-
+          import android.content.Intent
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.setContent
+          import androidx.compose.animation.core.*
           import androidx.compose.foundation.background
+          import androidx.compose.foundation.clickable
           import androidx.compose.foundation.layout.*
+          import androidx.compose.foundation.lazy.LazyColumn
+          import androidx.compose.foundation.lazy.items
+          import androidx.compose.foundation.shape.CircleShape
           import androidx.compose.foundation.shape.RoundedCornerShape
           import androidx.compose.material.icons.Icons
-          import androidx.compose.material.icons.filled.Security
-          import androidx.compose.material.icons.filled.Speed
+          import androidx.compose.material.icons.filled.ChevronRight
+          import androidx.compose.material.icons.filled.Dns
+          import androidx.compose.material.icons.filled.PowerSettingsNew
           import androidx.compose.material3.*
-          import androidx.compose.runtime.Composable
+          import androidx.compose.runtime.*
           import androidx.compose.ui.Alignment
           import androidx.compose.ui.Modifier
+          import androidx.compose.ui.draw.clip
+          import androidx.compose.ui.draw.scale
           import androidx.compose.ui.graphics.Brush
           import androidx.compose.ui.graphics.Color
+          import androidx.compose.ui.platform.LocalContext
           import androidx.compose.ui.text.font.FontWeight
           import androidx.compose.ui.unit.dp
+          import com.v2ray.ang.handler.MmkvManager
+          import com.v2ray.ang.service.V2RayVpnService
+          import com.v2ray.ang.ui.admin.AdminPanelActivity
+          import kotlinx.coroutines.delay
 
-          @Composable
-          fun ConnectionCard(name: String, flag: String, protocol: String, ping: String, connected: Boolean) {
-              val grad = if (connected) Brush.horizontalGradient(listOf(Color(0xFF1E3A8A), Color(0xFF3B82F6)))
-                         else Brush.horizontalGradient(listOf(Color(0xFF374151), Color(0xFF6B7280)))
-              Card(Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp),
-                  colors = CardDefaults.cardColors(containerColor = Color.Transparent)) {
-                  Box(Modifier.fillMaxWidth().background(grad).padding(20.dp)) {
-                      Row(verticalAlignment = Alignment.CenterVertically) {
-                          Surface(Modifier.size(56.dp), shape = RoundedCornerShape(16.dp),
-                              color = Color.White.copy(alpha = 0.2f)) {
-                              Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                  Text(flag, style = MaterialTheme.typography.headlineMedium)
-                              }
-                          }
-                          Spacer(Modifier.width(16.dp))
-                          Column(Modifier.weight(1f)) {
-                              Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
-                              Row {
-                                  Icon(Icons.Default.Security, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
-                                  Text(" $protocol", color = Color.White.copy(alpha = 0.7f))
-                                  Spacer(Modifier.width(12.dp))
-                                  Icon(Icons.Default.Speed, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
-                                  Text(" $ping", color = Color.White.copy(alpha = 0.7f))
-                              }
-                          }
+          class HomeActivity : ComponentActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContent {
+                      MaterialTheme {
+                          HomeScreen()
                       }
                   }
               }
           }
-          KTEOF
-          fi
 
-      - name: Add Admin to Manifest
-        run: |
-          MF="$GITHUB_WORKSPACE/V2rayNG/app/src/main/AndroidManifest.xml"
-          if ! grep -q "AdminPanelActivity" "$MF"; then
-            sed -i 's|</application>|    <activity android:name=".ui.admin.AdminPanelActivity" android:exported="false" android:label="Admin" />\n    </application>|' "$MF"
-            echo "Admin added to Manifest"
-          fi
+          @Composable
+          fun HomeScreen() {
+              val context = LocalContext.current
+              var isConnected by remember { mutableStateOf(false) }
+              var tapCount by remember { mutableStateOf(0) }
+              var showServers by remember { mutableStateOf(false) }
+              var servers by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
 
-      - name: Grant execute permission
-        run: chmod +x V2rayNG/gradlew
+              LaunchedEffect(Unit) {
+                  while (true) {
+                      isConnected = V2RayVpnService.isRunning
+                      try {
+                          val list = MmkvManager.decodeAllServerConfig().toList()
+                          servers = list.map { Triple(it.remarks, it.server, it.serverPort.toString()) }
+                      } catch (e: Exception) {}
+                      delay(1500)
+                  }
+              }
 
-      - name: Build Debug APK (arm64 only)
-        run: |
-          cd V2rayNG
-          ./gradlew assembleFossDebug -Pandroid.injected.build.abi=arm64-v8a --stacktrace || \
-          ./gradlew assembleDebug --stacktrace
+              val infinite = rememberInfiniteTransition(label = "pulse")
+              val pulse by infinite.animateFloat(
+                  initialValue = 1f,
+                  targetValue = 1.08f,
+                  animationSpec = infiniteRepeatable(
+                      animation = tween(1500, easing = FastOutSlowInEasing),
+                      repeatMode = RepeatMode.Reverse
+                  ),
+                  label = "pulse_anim"
+              )
 
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: vpn-apk
-          path: V2rayNG/app/build/outputs/apk/**/*arm64*.apk
+              val gradient = Brush.verticalGradient(
+                  colors = if (isConnected)
+                      listOf(Color(0xFF064E3B), Color(0xFF0F172A), Color(0xFF111827))
+                  else
+                      listOf(Color(0xFF1E293B), Color(0xFF0F172A), Color(0xFF020617))
+              )
+
+              Box(modifier = Modifier.fillMaxSize().background(gradient)) {
+                  Column(
+                      modifier = Modifier.fillMaxSize().padding(24.dp),
+                      horizontalAlignment = Alignment.CenterHorizontally
+                  ) {
+                      Spacer(Modifier.height(24.dp))
+                      Text(
+                          text = "Pro VPN",
+                          style = MaterialTheme.typography.headlineMedium,
+                          fontWeight = FontWeight.Bold,
+                          color = Color.White,
+                          modifier = Modifier.clickable {
+                              tapCount++
+                              if (tapCount >= 7) {
+                                  tapCount = 0
+                                  context.startActivity(Intent(context, AdminPanelActivity::class.java))
+                              }
+                          }
+                      )
+                      Spacer(Modifier.height(8.dp))
+                      Text(
+                          text = if (isConnected) "متصل و امن" else "برای اتصال آماده",
+           
