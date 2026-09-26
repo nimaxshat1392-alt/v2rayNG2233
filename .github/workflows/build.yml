@@ -49,6 +49,7 @@ jobs:
           export PATH=$PATH:$(go env GOPATH)/bin
           export GOFLAGS="-ldflags=-checklinkname=0"
           cd AndroidLibXrayLite
+          mkdir -p ../V2rayNG/app/libs
           go mod download
           gomobile init
           gomobile bind -v -androidapi 21 -o ../V2rayNG/app/libs/libv2ray.aar .
