@@ -15,38 +15,41 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Force init submodules
-        run: |
-          git submodule update --init --recursive || true
-          echo "=== AndroidLibXrayLite content ==="
-          ls -la AndroidLibXrayLite/ || echo "empty"
-          echo "=== Check for gradlew ==="
-          find AndroidLibXrayLite -name gradlew -type f || echo "no gradlew found"
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Clone AndroidLibXrayLite if empty
-        run: |
-          if [ ! -f "AndroidLibXrayLite/gradlew" ]; then
-            echo "AndroidLibXrayLite is empty - cloning directly"
-            rm -rf AndroidLibXrayLite
-            git clone --depth 1 https://github.com/2dust/AndroidLibXrayLite.git AndroidLibXrayLite
-          fi
-          ls -la AndroidLibXrayLite/
-          ls -la AndroidLibXrayLite/gradlew
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
 
-      - name: Build libv2ray AAR
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26b
+
+      - name: Clone AndroidLibXrayLite
         run: |
+          rm -rf AndroidLibXrayLite
+          git clone --depth 1 https://github.com/2dust/AndroidLibXrayLite.git AndroidLibXrayLite
+          ls -la AndroidLibXrayLite/
+
+      - name: Install gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+
+      - name: Build libv2ray.aar
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
           cd AndroidLibXrayLite
-          chmod +x gradlew
-          ./gradlew clean assembleRelease --stacktrace
-          find . -name "*.aar" -type f
-          mkdir -p ../V2rayNG/app/libs
-          find . -name "libv2ray*.aar" -exec cp {} ../V2rayNG/app/libs/libv2ray.aar \;
+          go mod download
+          gomobile init
+          gomobile bind -v -androidapi 21 -o ../V2rayNG/app/libs/libv2ray.aar .
           ls -la ../V2rayNG/app/libs/
 
       - name: Add material-icons dependency
@@ -288,5 +291,3 @@ jobs:
         with:
           name: vpn-apk
           path: V2rayNG/app/build/outputs/apk/debug/*.apk
-
-          
