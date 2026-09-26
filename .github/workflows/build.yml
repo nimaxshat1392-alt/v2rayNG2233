@@ -21,16 +21,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build AndroidLibXrayLite (libv2ray)
-        run: |
-          cd AndroidLibXrayLite
-          chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace || true
-          find . -name "*.aar" -type f
-          mkdir -p ../V2rayNG/app/libs
-          find . -name "*.aar" -exec cp {} ../V2rayNG/app/libs/ \; || true
-          ls -la ../V2rayNG/app/libs/
-
       - name: Add material-icons dependency
         run: |
           BUILD_FILE="V2rayNG/app/build.gradle.kts"
