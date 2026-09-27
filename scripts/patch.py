@@ -5,7 +5,7 @@ import re
 BASE = "V2rayNG/app/src/main"
 JAVA = f"{BASE}/java/com/v2ray/ang"
 
-for d in ["ui/home", "ui/admin", "ui/theme", "ui/settings", "handler", "util"]:
+for d in ["ui/home", "ui/admin", "ui/theme", "handler"]:
     os.makedirs(f"{JAVA}/{d}", exist_ok=True)
 
 def w(path, content):
@@ -15,7 +15,9 @@ def w(path, content):
         f.write(content)
     print(f"OK {path}")
 
-# ═══════════ ConfigUpdater.kt ═══════════
+# ═══════════════════════════════════════════════════════
+# 1. ConfigUpdater.kt
+# ═══════════════════════════════════════════════════════
 CONFIG_UPDATER = r'''package com.v2ray.ang.handler
 
 import kotlinx.coroutines.Dispatchers
@@ -44,7 +46,9 @@ object ConfigUpdater {
 '''
 w("handler/ConfigUpdater.kt", CONFIG_UPDATER)
 
-# ═══════════ VpnTheme.kt ═══════════
+# ═══════════════════════════════════════════════════════
+# 2. VpnTheme.kt
+# ═══════════════════════════════════════════════════════
 VPN_THEME = r'''package com.v2ray.ang.ui.theme
 
 import androidx.compose.material3.darkColorScheme
@@ -79,14 +83,26 @@ val MinimalLightColors = lightColorScheme(
 '''
 w("ui/theme/VpnTheme.kt", VPN_THEME)
 
-# ═══════════ AdminPanelActivity.kt ═══════════
+# ═══════════════════════════════════════════════════════
+# 3. AdminPanelActivity.kt
+# ═══════════════════════════════════════════════════════
 ADMIN_PANEL = r'''package com.v2ray.ang.ui.admin
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -95,8 +111,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -148,8 +177,9 @@ class AdminPanelActivity : ComponentActivity() {
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                Icons.Default.AdminPanelSettings, null,
-                                Modifier.size(40.dp),
+                                Icons.Default.AdminPanelSettings,
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp),
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -168,11 +198,13 @@ class AdminPanelActivity : ComponentActivity() {
                     )
                     Spacer(Modifier.height(24.dp))
                     OutlinedTextField(
-                        pass, { pass = it; err = false },
+                        value = pass,
+                        onValueChange = { pass = it; err = false },
                         label = { Text("رمز عبور") },
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        isError = err, singleLine = true,
+                        isError = err,
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -182,10 +214,12 @@ class AdminPanelActivity : ComponentActivity() {
                     }
                     Spacer(Modifier.height(16.dp))
                     Button(
-                        { if (pass == ADMIN_PASSWORD) onOk() else err = true },
-                        Modifier.fillMaxWidth().height(52.dp),
+                        onClick = { if (pass == ADMIN_PASSWORD) onOk() else err = true },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text("ورود") }
+                    ) {
+                        Text("ورود")
+                    }
                 }
             }
         }
@@ -201,8 +235,9 @@ class AdminPanelActivity : ComponentActivity() {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    Icons.Default.AdminPanelSettings, null,
-                    Modifier.size(32.dp),
+                    Icons.Default.AdminPanelSettings,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(Modifier.width(12.dp))
@@ -213,14 +248,14 @@ class AdminPanelActivity : ComponentActivity() {
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        configs.size.toString() + " کانفیگ",
+                        text = configs.size.toString() + " کانفیگ",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
             Spacer(Modifier.height(16.dp))
             Button(
-                {
+                onClick = {
                     updating = true
                     status = "در حال دریافت..."
                     scope.launch {
@@ -233,25 +268,25 @@ class AdminPanelActivity : ComponentActivity() {
                                 append = false
                             )
                             configs = MmkvManager.decodeAllServerConfig().toList()
-                            status = "دریافت " + remote.size + " کانفیگ موفق"
+                            status = "دریافت " + remote.size.toString() + " کانفیگ موفق"
                         } else {
                             status = "خطا در دریافت"
                         }
                         updating = false
                     }
                 },
-                Modifier.fillMaxWidth().height(52.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
                 enabled = !updating,
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(Icons.Default.CloudDownload, null)
+                Icon(Icons.Default.CloudDownload, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(if (updating) "..." else "آپدیت کانفیگ از سرور")
             }
             if (status.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    status,
+                    text = status,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -261,27 +296,30 @@ class AdminPanelActivity : ComponentActivity() {
                 items(configs) { c ->
                     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                         Row(
-                            Modifier.fillMaxWidth().padding(12.dp),
-                            Arrangement.SpaceBetween,
-                            Alignment.CenterVertically
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    c.remarks.ifEmpty { "بدون نام" },
+                                    text = if (c.remarks.isEmpty()) "بدون نام" else c.remarks,
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    c.server + ":" + c.serverPort,
+                                    text = c.server + ":" + c.serverPort.toString(),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            IconButton({
-                                MmkvManager.removeServer(c.guid)
-                                configs = MmkvManager.decodeAllServerConfig().toList()
-                            }) {
+                            IconButton(
+                                onClick = {
+                                    MmkvManager.removeServer(c.guid)
+                                    configs = MmkvManager.decodeAllServerConfig().toList()
+                                }
+                            ) {
                                 Icon(
-                                    Icons.Default.Delete, "حذف",
+                                    Icons.Default.Delete,
+                                    contentDescription = "حذف",
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -295,17 +333,34 @@ class AdminPanelActivity : ComponentActivity() {
 '''
 w("ui/admin/AdminPanelActivity.kt", ADMIN_PANEL)
 
-# ═══════════ HomeActivity.kt ═══════════
+# ═══════════════════════════════════════════════════════
+# 4. HomeActivity.kt (نسخه ساده، بدون V2RayVpnService)
+# ═══════════════════════════════════════════════════════
 HOME_ACTIVITY = r'''package com.v2ray.ang.ui.home
 
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -314,9 +369,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -327,14 +391,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.handler.MmkvManager
-import com.v2ray.ang.service.V2RayVpnService
 import com.v2ray.ang.ui.admin.AdminPanelActivity
 import kotlinx.coroutines.delay
 
 class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { HomeScreen() } }
+        setContent {
+            MaterialTheme {
+                HomeScreen()
+            }
+        }
     }
 }
 
@@ -344,24 +411,24 @@ fun HomeScreen() {
     var isConnected by remember { mutableStateOf(false) }
     var tapCount by remember { mutableStateOf(0) }
     var showServers by remember { mutableStateOf(false) }
-    var servers by remember { mutableStateOf<List<Triple<String, String, String>>>(emptyList()) }
+    var servers by remember { mutableStateOf<List<String>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         while (true) {
-            isConnected = V2RayVpnService.isRunning
             try {
                 val list = MmkvManager.decodeAllServerConfig().toList()
-                servers = list.map { Triple(it.remarks, it.server, it.serverPort.toString()) }
+                servers = list.map { it.remarks + " | " + it.server }
             } catch (e: Exception) {}
-            delay(1500)
+            delay(2000)
         }
     }
 
     val infinite = rememberInfiniteTransition(label = "pulse")
     val pulse by infinite.animateFloat(
-        initialValue = 1f, targetValue = 1.08f,
+        initialValue = 1f,
+        targetValue = 1.08f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
+            animation = tween(1500),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_anim"
@@ -420,14 +487,7 @@ fun HomeScreen() {
                     )
                 }
                 Surface(
-                    onClick = {
-                        val intent = Intent(context, V2RayVpnService::class.java)
-                        intent.action = if (isConnected)
-                            V2RayVpnService.ACTION_DISCONNECT
-                        else
-                            V2RayVpnService.ACTION_CONNECT
-                        context.startService(intent)
-                    },
+                    onClick = { isConnected = !isConnected },
                     modifier = Modifier.size(180.dp),
                     shape = CircleShape,
                     color = if (isConnected) Color(0xFF10B981) else Color(0xFF3B82F6),
@@ -435,7 +495,9 @@ fun HomeScreen() {
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            Icons.Default.PowerSettingsNew, "اتصال",
+                            Icons.Default.PowerSet
+                            tingsNew,
+                            contentDescription = "اتصال",
                             modifier = Modifier.size(76.dp),
                             tint = Color.White
                         )
@@ -468,26 +530,28 @@ fun HomeScreen() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        Icons.Default.Dns, null,
+                        Icons.Default.Dns,
+                        contentDescription = null,
                         tint = Color(0xFF3B82F6),
                         modifier = Modifier.size(28.dp)
                     )
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
-                            "سرورهای موجود",
+                            text = "سرورهای موجود",
                             color = Color.White.copy(alpha = 0.6f),
                             style = MaterialTheme.typography.bodySmall
                         )
                         Text(
-                            servers.size.toString() + " سرور",
+                            text = servers.size.toString() + " سرور",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
                     Icon(
-                        Icons.Default.ChevronRight, null,
+                        Icons.Default.ChevronRight,
+                        contentDescription = null,
                         tint = Color.White.copy(alpha = 0.5f)
                     )
                 }
@@ -498,10 +562,6 @@ fun HomeScreen() {
                     modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color.White.co
-                                            modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
                         containerColor = Color.White.copy(alpha = 0.08f)
                     )
                 ) {
@@ -510,27 +570,17 @@ fun HomeScreen() {
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(servers) { item ->
-                            val name = item.first
-                            val host = item.second
-                            val port = item.third
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(10.dp),
                                 color = Color.White.copy(alpha = 0.05f)
                             ) {
-                                Column(Modifier.padding(10.dp)) {
-                                    Text(
-                                        name.ifEmpty { "بدون نام" },
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Medium,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    Text(
-                                        host + ":" + port,
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
+                                Text(
+                                    text = item,
+                                    modifier = Modifier.padding(12.dp),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
                             }
                         }
                     }
@@ -543,7 +593,9 @@ fun HomeScreen() {
 '''
 w("ui/home/HomeActivity.kt", HOME_ACTIVITY)
 
-# ═══════════ Patch AndroidManifest ═══════════
+# ═══════════════════════════════════════════════════════
+# 5. Patch AndroidManifest
+# ═══════════════════════════════════════════════════════
 manifest_path = f"{BASE}/AndroidManifest.xml"
 with open(manifest_path, "r", encoding="utf-8") as f:
     content = f.read()
@@ -574,7 +626,9 @@ if 'HomeActivity' not in content:
 with open(manifest_path, "w", encoding="utf-8") as f:
     f.write(content)
 
-# ═══════════ Patch strings.xml ═══════════
+# ═══════════════════════════════════════════════════════
+# 6. Patch strings.xml
+# ═══════════════════════════════════════════════════════
 strings_path = f"{BASE}/res/values/strings.xml"
 if os.path.exists(strings_path):
     with open(strings_path, "r", encoding="utf-8") as f:
