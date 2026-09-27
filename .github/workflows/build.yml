@@ -21,7 +21,7 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Download libv2ray AAR
+      - name: Download libv2ray AAR (arm64 only)
         run: |
           mkdir -p V2rayNG/app/libs
           cd V2rayNG/app/libs
@@ -35,20 +35,65 @@ jobs:
             sed -i 's|dependencies {|dependencies {\n    implementation("androidx.compose.material:material-icons-extended")\n    implementation("androidx.compose.animation:animation:1.7.6")|' "$BUILD_FILE"
           fi
 
+      - name: Limit ABIs to arm64-v8a only
+        run: |
+          BUILD_FILE="V2rayNG/app/build.gradle.kts"
+
+          # غیرفعال کردن splits اگه هست
+          python3 << 'PYEOF'
+          import re
+          path = "V2rayNG/app/build.gradle.kts"
+          with open(path, "r") as f:
+              content = f.read()
+
+          # اضافه کردن ndk abiFilters داخل defaultConfig
+          if 'abiFilters' not in content:
+              content = re.sub(
+                  r'(defaultConfig\s*\{)',
+                  r'\1\n        ndk {\n            abiFilters.add("arm64-v8a")\n        }',
+                  content, count=1
+              )
+
+          # اگر splits block وجود داره، فقط arm64 رو نگه دار
+          content = re.sub(
+              r'include\("arm64-v8a",\s*"armeabi-v7a",\s*"x86",\s*"x86_64"\)',
+              'include("arm64-v8a")',
+              content
+          )
+          content = re.sub(
+              r'include\("arm64-v8a",\s*"armeabi-v7a"\)',
+              'include("arm64-v8a")',
+              content
+          )
+
+          with open(path, "w") as f:
+              f.write(content)
+          print("ABI limited to arm64-v8a")
+          PYEOF
+
       - name: Run patch script
         run: python3 scripts/patch.py
 
       - name: Grant execute permission
         run: chmod +x V2rayNG/gradlew
 
-      - name: Build APK
+      - name: Build APK (arm64 only, foss flavor)
         run: |
           cd V2rayNG
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleFossDebug --stacktrace || ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Find and list APKs
+        run: |
+          echo "=== All APKs found ==="
+          find V2rayNG/app/build/outputs/apk -name "*.apk" -type f -exec ls -lh {} \;
+
+      - name: Upload only arm64 APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: pro-vpn-apk
-          path: V2rayNG/app/build/outputs/apk/**/*.apk
+          path: |
+            V2rayNG/app/build/outputs/apk/**/*arm64*.apk
+            V2rayNG/app/build/outputs/apk/**/*universal*.apk
+          if-no-files-found: warn
+          compression-level: 9
