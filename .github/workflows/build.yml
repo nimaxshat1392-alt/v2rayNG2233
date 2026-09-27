@@ -34,51 +34,57 @@ jobs:
       - name: Create SpeedtestManager
         run: |
           mkdir -p V2rayNG/app/src/main/java/com/v2ray/ang/handler
-          printf '%s\n' \
-            'package com.v2ray.ang.handler' \
-            '' \
-            'import com.v2ray.ang.dto.entities.ProfileItem' \
-            '' \
-            'object SpeedtestManager {' \
-            '    fun getRealPingTime(guid: String): Long = 0L' \
-            '    fun getRealPingTime(guid: String, onResult: (Long) -> Unit) {' \
-            '        onResult(0L)' \
-            '    }' \
-            '    suspend fun testAllServersPing(servers: List<ProfileItem>) = Unit' \
-            '}' \
-            > V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt
-          echo "SpeedtestManager created"
+          cat > V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt << 'ENDOFKOTLIN'
+package com.v2ray.ang.handler
 
-      - name: Create ConfigUpdater
-        run: |
-          mkdir -p V2rayNG/app/src/main/java/com/v2ray/ang/handler
-          printf '%s\n' \
-            'package com.v2ray.ang.handler' \
-            '' \
-            'import kotlinx.coroutines.Dispatchers' \
-            'import kotlinx.coroutines.withContext' \
-            'import org.json.JSONArray' \
-            'import java.net.HttpURLConnection' \
-            'import java.net.URL' \
-            '' \
-            'object ConfigUpdater {' \
-            '    private const val URL_STR = "https://raw.githubusercontent.com/nimaxshat1392-alt/v2rayNG2233/master/configs.json"' \
-            '' \
-            '    suspend fun fetch(): List<String> = withContext(Dispatchers.IO) {' \
-            '        try {' \
-            '            val c = URL(URL_STR).openConnection() as HttpURLConnection' \
-            '            c.connectTimeout = 15000' \
-            '            c.readTimeout = 15000' \
-            '            val r = c.inputStream.bufferedReader().readText()' \
-            '            val a = JSONArray(r)' \
-            '            val l = mutableListOf<String>()' \
-            '            for (i in 0 until a.length()) l.add(a.getString(i))' \
-            '            l' \
-            '        } catch (e: Exception) { emptyList() }' \
-            '    }' \
-            '}' \
-            > V2rayNG/app/src/main/java/com/v2ray/ang/handler/ConfigUpdater.kt
-          echo "ConfigUpdater created"
+import com.v2ray.ang.dto.entities.ProfileItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.InetSocketAddress
+import java.net.Socket
+
+data class RemoteIPInfo(
+    val ipAddress: String = "",
+    val country: String = ""
+)
+
+object SpeedtestManager {
+
+    fun socketConnectTime(address: String, port: Int): Long {
+        return try {
+            val start = System.currentTimeMillis()
+            val socket = Socket()
+            socket.connect(InetSocketAddress(address, port), 2000)
+            val end = System.currentTimeMillis()
+            socket.close()
+            end - start
+        } catch (e: Exception) { -1L }
+    }
+
+    suspend fun getRemoteIPInfo(): RemoteIPInfo = withContext(Dispatchers.IO) {
+        try {
+            val url = java.net.URL("https://api.ipify.org?format=json")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            val response = conn.inputStream.bufferedReader().readText()
+            val ip = Regex("\"ip\"\\s*:\\s*\"([^\"]+)\"").find(response)?.groupValues?.get(1) ?: ""
+            RemoteIPInfo(ipAddress = ip, country = "")
+        } catch (e: Exception) {
+            RemoteIPInfo()
+        }
+    }
+
+    fun getRealPingTime(guid: String): Long = 0L
+
+    fun getRealPingTime(guid: String, onResult: (Long) -> Unit) {
+        onResult(0L)
+    }
+
+    suspend fun testAllServersPing(servers: List<ProfileItem>) = Unit
+}
+ENDOFKOTLIN
+          echo "SpeedtestManager created"
 
       - name: Download libv2ray AAR
         run: |
@@ -108,7 +114,6 @@ jobs:
         run: |
           cd V2rayNG
           ./gradlew assembleDebug --stacktrace
-        continue-on-error: true
 
       - name: List APKs
         if: always()
