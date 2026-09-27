@@ -16,103 +16,55 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Clean old Kotlin files
+      - name: Clean old files
         run: |
           JAVA="V2rayNG/app/src/main/java/com/v2ray/ang"
-          rm -rf "$JAVA/ui/home" 2>/dev/null || true
-          rm -rf "$JAVA/ui/admin" 2>/dev/null || true
-          rm -rf "$JAVA/ui/components" 2>/dev/null || true
-          rm -rf "$JAVA/worker" 2>/dev/null || true
-          rm -rf "$JAVA/widget" 2>/dev/null || true
-          rm -f "$JAVA/ui/theme/VpnTheme.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/theme/ThemeAdvanced.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/theme/TypographyConfig.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/theme/ColorPalette.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/ConfigUpdater.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/PingManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/ConfigParser.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/ServersRepository.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/ServerRepository.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/VpnConnectionManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/VpnNotificationManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/LanguageManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/util/NotificationChannelHelper.kt" 2>/dev/null || true
+          rm -rf "$JAVA/ui/home" "$JAVA/ui/admin" "$JAVA/ui/components" "$JAVA/worker" "$JAVA/widget" 2>/dev/null || true
+          rm -f "$JAVA/ui/theme/VpnTheme.kt" "$JAVA/ui/theme/ThemeAdvanced.kt" 2>/dev/null || true
+          rm -f "$JAVA/ui/theme/TypographyConfig.kt" "$JAVA/ui/theme/ColorPalette.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/ConfigUpdater.kt" "$JAVA/handler/PingManager.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/ConfigParser.kt" "$JAVA/handler/ServersRepository.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/VpnConnectionManager.kt" "$JAVA/handler/VpnNotificationManager.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/LanguageManager.kt" "$JAVA/util/NotificationChannelHelper.kt" 2>/dev/null || true
           rm -f "$JAVA/util/PreferencesManager.kt" 2>/dev/null || true
           echo "Cleanup done"
 
-      - name: Restore SpeedtestManager
+      - name: Restore SpeedtestManager.kt
         run: |
-          python3 << 'PYEOF'
-          import os
-          import urllib.request
-
-          path = "V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt"
-          os.makedirs(os.path.dirname(path), exist_ok=True)
-
-          url = "https://raw.githubusercontent.com/2dust/v2rayNG/master/V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt"
-          downloaded = False
-          try:
-              urllib.request.urlretrieve(url, path)
-              with open(path) as f:
-                  content = f.read()
-              if "object SpeedtestManager" in content:
-                  downloaded = True
-                  print("Downloaded from GitHub:", len(content), "chars")
-          except Exception as e:
-              print("Download failed:", e)
-
-          if not downloaded:
-              print("Creating minimal SpeedtestManager")
-              minimal = '''package com.v2ray.ang.handler
-
-import com.v2ray.ang.dto.entities.ProfileItem
-
-object SpeedtestManager {
-    fun getRealPingTime(guid: String): Long = 0L
-    fun getRealPingTime(guid: String, onResult: (Long) -> Unit) {
-        onResult(0L)
-    }
-    suspend fun testAllServersPing(servers: List<ProfileItem>) = Unit
-}
-'''
-              with open(path, "w") as f:
-                  f.write(minimal)
-              print("Minimal SpeedtestManager created")
-
-          print("File size:", os.path.getsize(path), "bytes")
-          PYEOF
+          mkdir -p V2rayNG/app/src/main/java/com/v2ray/ang/handler
+          printf '%s\n' \
+            'package com.v2ray.ang.handler' \
+            '' \
+            'import com.v2ray.ang.dto.entities.ProfileItem' \
+            '' \
+            'object SpeedtestManager {' \
+            '    fun getRealPingTime(guid: String): Long = 0L' \
+            '    fun getRealPingTime(guid: String, onResult: (Long) -> Unit) {' \
+            '        onResult(0L)' \
+            '    }' \
+            '    suspend fun testAllServersPing(servers: List<ProfileItem>) = Unit' \
+            '}' \
+            > V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt
+          echo "SpeedtestManager restored"
+          cat V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt
 
       - name: Reset AndroidManifest
         run: |
-          python3 << 'PYEOF'
+          python3 -c "
           import re
-          path = "V2rayNG/app/src/main/AndroidManifest.xml"
-          with open(path) as f: c = f.read()
-
-          for name in ["HomeActivity", "AdminPanelActivity", "SettingsActivity",
-                       "SpeedTestActivity", "AboutActivity", "CountryListActivity",
-                       "ServerListActivity", "DataUsageActivity", "BackupRestoreActivity",
-                       "KillSwitchActivity", "SplitTunnelActivity", "DnsSettingsActivity",
-                       "RoutingActivity", "ProxySettingsActivity", "FirstRunActivity",
-                       "SplashActivity", "HelpActivity", "LegalActivity", "AboutNewActivity",
-                       "QrScannerActivity"]:
-              c = re.sub(rf'<activity[^>]*android:name="[^"]*\.{name}"[^>]*>.*?</activity>', '', c, flags=re.DOTALL)
-              c = re.sub(rf'<activity[^>]*android:name="[^"]*\.{name}"[^>]*/>', '', c)
-              c = re.sub(rf'<receiver[^>]*android:name="[^"]*\.{name}"[^>]*>.*?</receiver>', '', c, flags=re.DOTALL)
-
-          c = c.replace('android:enabled="false" android:exported="false" android:name=".ui.main.MainActivity"',
-                        'android:name=".ui.main.MainActivity"')
-
+          path = 'V2rayNG/app/src/main/AndroidManifest.xml'
+          c = open(path).read()
+          names = ['HomeActivity','AdminPanelActivity','SettingsActivity','SpeedTestActivity','AboutActivity','CountryListActivity','ServerListActivity','DataUsageActivity','BackupRestoreActivity','KillSwitchActivity','SplitTunnelActivity','DnsSettingsActivity','RoutingActivity','ProxySettingsActivity','FirstRunActivity','SplashActivity','HelpActivity','LegalActivity','AboutNewActivity','QrScannerActivity']
+          for name in names:
+              c = re.sub(r'<activity[^>]*android:name=\"[^\"]*\.' + name + r'\"[^>]*>.*?</activity>', '', c, flags=re.DOTALL)
+              c = re.sub(r'<activity[^>]*android:name=\"[^\"]*\.' + name + r'\"[^>]*/>', '', c)
+              c = re.sub(r'<receiver[^>]*android:name=\"[^\"]*\.' + name + r'\"[^>]*>.*?</receiver>', '', c, flags=re.DOTALL)
+          c = c.replace('android:enabled=\"false\" android:exported=\"false\" android:name=\".ui.main.MainActivity\"', 'android:name=\".ui.main.MainActivity\"')
           if 'android.intent.category.LAUNCHER' not in c:
-              c = re.sub(
-                  r'(<activity[^>]*android:name="\.ui\.main\.MainActivity"[^>]*>)',
-                  r'\1\n            <intent-filter>\n                <action android:name="android.intent.action.MAIN" />\n                <category android:name="android.intent.category.LAUNCHER" />\n            </intent-filter>',
-                  c, count=1
-              )
-
-          with open(path, "w") as f: f.write(c)
-          print("Manifest reset done")
-          PYEOF
+              c = re.sub(r'(<activity[^>]*android:name=\"\.ui\.main\.MainActivity\"[^>]*>)', r'\1\n            <intent-filter>\n                <action android:name=\"android.intent.action.MAIN\" />\n                <category android:name=\"android.intent.category.LAUNCHER\" />\n            </intent-filter>', c, count=1)
+          open(path, 'w').write(c)
+          print('Manifest reset done')
+          "
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
