@@ -103,19 +103,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -134,9 +129,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.ConfigUpdater
-import com.v2ray.ang.handler.MmkvManager
 import kotlinx.coroutines.launch
 
 class AdminPanelActivity : ComponentActivity() {
@@ -228,9 +221,9 @@ class AdminPanelActivity : ComponentActivity() {
     @Composable
     fun AdminContent() {
         val scope = rememberCoroutineScope()
-        var configs by remember { mutableStateOf(MmkvManager.decodeAllServerConfig().toList()) }
         var updating by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf("") }
+        var remoteCount by remember { mutableStateOf(0) }
 
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -248,7 +241,7 @@ class AdminPanelActivity : ComponentActivity() {
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = configs.size.toString() + " کانفیگ",
+                        text = "آخرین دریافت: " + remoteCount.toString() + " کانفیگ",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -257,21 +250,14 @@ class AdminPanelActivity : ComponentActivity() {
             Button(
                 onClick = {
                     updating = true
-                    status = "در حال دریافت..."
+                    status = "در حال دریافت از سرور..."
                     scope.launch {
                         val remote = ConfigUpdater.fetchRemoteConfigs()
-                        if (remote.isNotEmpty()) {
-                            MmkvManager.removeServerViaSubid("remote_configs")
-                            AngConfigManager.importBatchConfig(
-                                remote.joinToString("\n"),
-                                "remote_configs",
-                                append = false
-                            )
-                            configs = MmkvManager.decodeAllServerConfig().toList()
-                            status = "دریافت " + remote.size.toString() + " کانفیگ موفق"
-                        } else {
-                            status = "خطا در دریافت"
-                        }
+                        remoteCount = remote.size
+                        status = if (remote.isNotEmpty())
+                            "دریافت " + remote.size.toString() + " کانفیگ موفق"
+                        else
+                            "خطا در دریافت از سرور"
                         updating = false
                     }
                 },
@@ -284,49 +270,25 @@ class AdminPanelActivity : ComponentActivity() {
                 Text(if (updating) "..." else "آپدیت کانفیگ از سرور")
             }
             if (status.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(
                     text = status,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            Spacer(Modifier.height(16.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(configs) { c ->
-                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = if (c.remarks.isEmpty()) "بدون نام" else c.remarks,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    text = c.server + ":" + c.serverPort.toString(),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    MmkvManager.removeServer(c.guid)
-                                    configs = MmkvManager.decodeAllServerConfig().toList()
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "حذف",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            Spacer(Modifier.height(24.dp))
+            Text(
+                text = "مدیریت کانفیگ‌ها",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "برای اعمال کانفیگ‌ها روی همه نسخه‌ها، فایل configs.json را در گیت‌هاب ویرایش کنید و سپس دکمه آپدیت را بزنید.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -334,7 +296,7 @@ class AdminPanelActivity : ComponentActivity() {
 w("ui/admin/AdminPanelActivity.kt", ADMIN_PANEL)
 
 # ═══════════════════════════════════════════════════════
-# 4. HomeActivity.kt (نسخه ساده، بدون V2RayVpnService)
+# 4. HomeActivity.kt
 # ═══════════════════════════════════════════════════════
 HOME_ACTIVITY = r'''package com.v2ray.ang.ui.home
 
@@ -349,34 +311,21 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -390,9 +339,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.ui.admin.AdminPanelActivity
-import kotlinx.coroutines.delay
 
 class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -410,18 +357,6 @@ fun HomeScreen() {
     val context = LocalContext.current
     var isConnected by remember { mutableStateOf(false) }
     var tapCount by remember { mutableStateOf(0) }
-    var showServers by remember { mutableStateOf(false) }
-    var servers by remember { mutableStateOf<List<String>>(emptyList()) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            try {
-                val list = MmkvManager.decodeAllServerConfig().toList()
-                servers = list.map { it.remarks + " | " + it.server }
-            } catch (e: Exception) {}
-            delay(2000)
-        }
-    }
 
     val infinite = rememberInfiniteTransition(label = "pulse")
     val pulse by infinite.animateFloat(
@@ -495,8 +430,7 @@ fun HomeScreen() {
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            Icons.Default.PowerSet
-                            tingsNew,
+                            Icons.Default.PowerSettingsNew,
                             contentDescription = "اتصال",
                             modifier = Modifier.size(76.dp),
                             tint = Color.White
@@ -518,74 +452,11 @@ fun HomeScreen() {
                 color = Color.White.copy(alpha = 0.5f)
             )
             Spacer(Modifier.weight(1f))
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { showServers = !showServers },
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.White.copy(alpha = 0.08f)
-                )
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Dns,
-                        contentDescription = null,
-                        tint = Color(0xFF3B82F6),
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = "سرورهای موجود",
-                            color = Color.White.copy(alpha = 0.6f),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            text = servers.size.toString() + " سرور",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    Icon(
-                        Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.5f)
-                    )
-                }
-            }
-            if (showServers) {
-                Spacer(Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.White.copy(alpha = 0.08f)
-                    )
-                ) {
-                    LazyColumn(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(servers) { item ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color.White.copy(alpha = 0.05f)
-                            ) {
-                                Text(
-                                    text = item,
-                                    modifier = Modifier.padding(12.dp),
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            Text(
+                text = "نسخه ۱.۰.۰ - برای پنل مدیریت ۷ بار روی عنوان ضربه بزنید",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.3f)
+            )
             Spacer(Modifier.height(12.dp))
         }
     }
