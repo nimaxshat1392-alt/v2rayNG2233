@@ -1,4 +1,4 @@
-name: Build Pro VPN
+name: Build Fast VPN
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -15,90 +16,85 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Clean up old files
+      - name: Clean old Kotlin files
         run: |
-          echo "=== Removing old files ==="
-
-          # حذف فایل‌های راهنما و اسکریپت‌های قدیمی
-          rm -f MASTER_FIX_GUIDE.txt 2>/dev/null || true
-          rm -f scripts/patch.py 2>/dev/null || true
-          rm -f scripts/generate_old.py 2>/dev/null || true
-
-          # حذف ورک‌فلوهای قدیمی
-          rm -f .github/workflows/auto-build-vpn.yml 2>/dev/null || true
-          rm -f .github/workflows/fix.yml 2>/dev/null || true
-          rm -f .github/workflows/build-old.yml 2>/dev/null || true
-
-          # حذف فایل‌های Kotlin که ممکنه خراب باشن
           JAVA="V2rayNG/app/src/main/java/com/v2ray/ang"
           rm -rf "$JAVA/ui/home" 2>/dev/null || true
           rm -rf "$JAVA/ui/admin" 2>/dev/null || true
-          rm -f "$JAVA/ui/theme/VpnTheme.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/ConfigUpdater.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/dashboard/ModernDashboard.kt" 2>/dev/null || true
           rm -rf "$JAVA/ui/components" 2>/dev/null || true
-          rm -f "$JAVA/ui/settings/SettingsScreen.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/settings/SplitTunnelingScreen.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/settings/AdvancedSettings.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/settings/ThemeSelector.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/settings/FAQScreen.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/settings/SupportCard.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/settings/DataUsageScreen.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/SpeedtestManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/SpeedHistoryManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/AppUpdateChecker.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/SubscriptionManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/SavedProfilesManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/BackupManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/RoutingRules.kt" 2>/dev/null || true
+          rm -rf "$JAVA/worker" 2>/dev/null || true
+          rm -rf "$JAVA/widget" 2>/dev/null || true
+          rm -f "$JAVA/ui/theme/VpnTheme.kt" 2>/dev/null || true
+          rm -f "$JAVA/ui/theme/ThemeAdvanced.kt" 2>/dev/null || true
+          rm -f "$JAVA/ui/theme/TypographyConfig.kt" 2>/dev/null || true
+          rm -f "$JAVA/ui/theme/ColorPalette.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/ConfigUpdater.kt" 2>/dev/null || true
           rm -f "$JAVA/handler/PingManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/handler/DataUsage.kt" 2>/dev/null || true
-          rm -f "$JAVA/util/ModernNotification.kt" 2>/dev/null || true
-          rm -f "$JAVA/util/CrashReporter.kt" 2>/dev/null || true
-          rm -f "$JAVA/util/NetworkChecker.kt" 2>/dev/null || true
-          rm -f "$JAVA/util/Logger.kt" 2>/dev/null || true
-          rm -f "$JAVA/util/DataManager.kt" 2>/dev/null || true
-          rm -f "$JAVA/receiver/BootReceiver.kt" 2>/dev/null || true
-          rm -f "$JAVA/service/VpnTileService.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/components/ConnectionStatus.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/components/UpdateDialog.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/components/RatingDialog.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/components/TrafficGraph.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/components/ConnectionCard.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/components/InAppMessages.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/SplashActivity.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/WelcomeScreen.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/TutorialScreen.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/widget/VpnWidgetProvider.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/ConfigParser.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/ServersRepository.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/ServerRepository.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/VpnConnectionManager.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/VpnNotificationManager.kt" 2>/dev/null || true
+          rm -f "$JAVA/handler/LanguageManager.kt" 2>/dev/null || true
+          rm -f "$JAVA/util/NotificationChannelHelper.kt" 2>/dev/null || true
+          rm -f "$JAVA/util/PreferencesManager.kt" 2>/dev/null || true
+          echo "=== Cleanup complete ==="
 
-          echo "=== Cleanup done ==="
-          ls -la scripts/ 2>/dev/null || echo "scripts folder not found"
-          ls -la .github/workflows/ 2>/dev/null
+      - name: Restore original v2rayNG core files
+        run: |
+          JAVA="V2rayNG/app/src/main/java/com/v2ray/ang"
+          mkdir -p "$JAVA/handler"
+          mkdir -p "$JAVA/service"
+
+          # دانلود SpeedtestManager.kt اصلی از مخزن 2dust
+          echo "=== Downloading original SpeedtestManager.kt ==="
+          curl -L -s -o "$JAVA/handler/SpeedtestManager.kt" \
+            "https://raw.githubusercontent.com/2dust/v2rayNG/master/V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt" \
+            || echo "download failed"
+
+          # اگر دانلود موفق نبود، نسخه ساده بساز
+          if [ ! -s "$JAVA/handler/SpeedtestManager.kt" ] || ! grep -q "object SpeedtestManager" "$JAVA/handler/SpeedtestManager.kt"; then
+            echo "=== Creating minimal SpeedtestManager ==="
+            cat > "$JAVA/handler/SpeedtestManager.kt" << 'KTEOF'
+package com.v2ray.ang.handler
+
+import com.v2ray.ang.dto.entities.ProfileItem
+
+object SpeedtestManager {
+    fun getRealPingTime(guid: String): Long = 0L
+    fun getRealPingTime(guid: String, onResult: (Long) -> Unit) {
+        onResult(0L)
+    }
+    suspend fun testAllServersPing(servers: List<ProfileItem>) = Unit
+}
+KTEOF
+          fi
+
+          echo "=== SpeedtestManager.kt status ==="
+          wc -l "$JAVA/handler/SpeedtestManager.kt"
 
       - name: Reset AndroidManifest
         run: |
-          echo "=== Resetting AndroidManifest.xml ==="
           MF="V2rayNG/app/src/main/AndroidManifest.xml"
-
           python3 << 'PYEOF'
           import re
           path = "V2rayNG/app/src/main/AndroidManifest.xml"
-          with open(path, "r") as f:
-              c = f.read()
+          with open(path) as f: c = f.read()
 
-          # حذف HomeActivity، AdminPanelActivity، SettingsActivity، ProBootReceiver، VpnTileService
-          c = re.sub(r'<activity[^>]*android:name="\.ui\.home\.HomeActivity"[^>]*>.*?</activity>', '', c, flags=re.DOTALL)
-          c = re.sub(r'<activity[^>]*android:name="\.ui\.admin\.AdminPanelActivity"[^>]*/>', '', c)
-          c = re.sub(r'<activity[^>]*android:name="\.ui\.settings\.SettingsActivity"[^>]*/>', '', c)
-          c = re.sub(r'<receiver[^>]*android:name="\.receiver\.ProBootReceiver"[^>]*>.*?</receiver>', '', c, flags=re.DOTALL)
-          c = re.sub(r'<service[^>]*android:name="\.service\.VpnTileService"[^>]*>.*?</service>', '', c, flags=re.DOTALL)
-          c = re.sub(r'<uses-permission[^>]*android:name="android\.permission\.RECEIVE_BOOT_COMPLETED"[^>]*/>', '', c)
+          for name in ["HomeActivity", "AdminPanelActivity", "SettingsActivity",
+                       "SpeedTestActivity", "AboutActivity", "CountryListActivity",
+                       "ServerListActivity", "DataUsageActivity", "BackupRestoreActivity",
+                       "KillSwitchActivity", "SplitTunnelActivity", "DnsSettingsActivity",
+                       "RoutingActivity", "ProxySettingsActivity", "FirstRunActivity",
+                       "SplashActivity", "HelpActivity", "LegalActivity", "AboutNewActivity",
+                       "QrScannerActivity"]:
+              c = re.sub(rf'<activity[^>]*android:name="[^"]*\.{name}"[^>]*>.*?</activity>', '', c, flags=re.DOTALL)
+              c = re.sub(rf'<activity[^>]*android:name="[^"]*\.{name}"[^>]*/>', '', c)
+              c = re.sub(rf'<receiver[^>]*android:name="[^"]*\.{name}"[^>]*>.*?</receiver>', '', c, flags=re.DOTALL)
 
-          # برگرداندن MainActivity به حالت اصلی (اگه غیرفعال شده بود)
           c = c.replace('android:enabled="false" android:exported="false" android:name=".ui.main.MainActivity"',
                         'android:name=".ui.main.MainActivity"')
 
-          # اگه launcher حذف شده، به MainActivity برگردون
           if 'android.intent.category.LAUNCHER' not in c:
               c = re.sub(
                   r'(<activity[^>]*android:name="\.ui\.main\.MainActivity"[^>]*>)',
@@ -106,18 +102,9 @@ jobs:
                   c, count=1
               )
 
-          with open(path, "w") as f:
-              f.write(c)
+          with open(path, "w") as f: f.write(c)
           print("Manifest reset done")
           PYEOF
-
-      - name: Reset strings.xml
-        run: |
-          STRINGS="V2rayNG/app/src/main/res/values/strings.xml"
-          if [ -f "$STRINGS" ]; then
-            sed -i 's|<string name="app_name">.*</string>|<string name="app_name">v2rayNG</string>|' "$STRINGS"
-          fi
-          echo "strings.xml reset"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -129,7 +116,7 @@ jobs:
         run: |
           mkdir -p V2rayNG/app/libs
           cd V2rayNG/app/libs
-          curl -L -o libv2ray.aar "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar" || echo "download failed"
+          curl -L -o libv2ray.aar "https://github.com/2dust/AndroidLibXrayLite/releases/latest/download/libv2ray.aar" || echo "failed"
           ls -la
 
       - name: Add Compose deps
@@ -140,7 +127,7 @@ jobs:
           fi
           echo "Compose deps added"
 
-      - name: Limit ABIs to arm64-v8a
+      - name: Limit to arm64-v8a
         run: |
           F="V2rayNG/app/build.gradle.kts"
           python3 -c "
@@ -152,18 +139,47 @@ jobs:
           print('ABI limited to arm64-v8a')
           "
 
+      - name: Run generate script
+        run: python3 scripts/generate.py
+
+      - name: Run fixer (self-healing)
+        run: python3 scripts/fixer.py
+        continue-on-error: true
+
       - name: Grant execute permission
         run: chmod +x V2rayNG/gradlew
 
-      - name: Build APK (baseline - no patches yet)
+      - name: Build APK - Attempt 1
+        id: build1
+        continue-on-error: true
         run: |
           cd V2rayNG
-          ./gradlew assembleFossDebug --stacktrace || ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleFossDebug --stacktrace
+
+      - name: Show errors if failed
+        if: steps.build1.outcome == 'failure'
+        run: |
+          echo "=== First build failed, showing errors ==="
+          cd V2rayNG
+          ./gradlew assembleFossDebug --stacktrace 2>&1 | grep -E "^e:|error:|FAILURE|What went wrong" | head -50 || true
+
+      - name: Build APK - Attempt 2 (fallback)
+        if: steps.build1.outcome == 'failure'
+        run: |
+          cd V2rayNG
+          ./gradlew assembleDebug --stacktrace
+
+      - name: List all APKs
+        if: always()
+        run: |
+          echo "=== APK files found ==="
+          find V2rayNG/app/build/outputs/apk -name "*.apk" -type f -exec ls -lh {} \; || echo "No APK found"
 
       - name: Upload APK
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: baseline-apk
+          name: fast-vpn-apk
           path: V2rayNG/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
           compression-level: 9
