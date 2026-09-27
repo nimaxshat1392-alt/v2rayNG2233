@@ -38,25 +38,32 @@ jobs:
           rm -f "$JAVA/handler/LanguageManager.kt" 2>/dev/null || true
           rm -f "$JAVA/util/NotificationChannelHelper.kt" 2>/dev/null || true
           rm -f "$JAVA/util/PreferencesManager.kt" 2>/dev/null || true
-          echo "=== Cleanup complete ==="
+          echo "Cleanup done"
 
-      - name: Restore original v2rayNG core files
+      - name: Restore SpeedtestManager
         run: |
-          JAVA="V2rayNG/app/src/main/java/com/v2ray/ang"
-          mkdir -p "$JAVA/handler"
-          mkdir -p "$JAVA/service"
+          python3 << 'PYEOF'
+          import os
+          import urllib.request
 
-          # دانلود SpeedtestManager.kt اصلی از مخزن 2dust
-          echo "=== Downloading original SpeedtestManager.kt ==="
-          curl -L -s -o "$JAVA/handler/SpeedtestManager.kt" \
-            "https://raw.githubusercontent.com/2dust/v2rayNG/master/V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt" \
-            || echo "download failed"
+          path = "V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt"
+          os.makedirs(os.path.dirname(path), exist_ok=True)
 
-          # اگر دانلود موفق نبود، نسخه ساده بساز
-          if [ ! -s "$JAVA/handler/SpeedtestManager.kt" ] || ! grep -q "object SpeedtestManager" "$JAVA/handler/SpeedtestManager.kt"; then
-            echo "=== Creating minimal SpeedtestManager ==="
-            cat > "$JAVA/handler/SpeedtestManager.kt" << 'KTEOF'
-package com.v2ray.ang.handler
+          url = "https://raw.githubusercontent.com/2dust/v2rayNG/master/V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt"
+          downloaded = False
+          try:
+              urllib.request.urlretrieve(url, path)
+              with open(path) as f:
+                  content = f.read()
+              if "object SpeedtestManager" in content:
+                  downloaded = True
+                  print("Downloaded from GitHub:", len(content), "chars")
+          except Exception as e:
+              print("Download failed:", e)
+
+          if not downloaded:
+              print("Creating minimal SpeedtestManager")
+              minimal = '''package com.v2ray.ang.handler
 
 import com.v2ray.ang.dto.entities.ProfileItem
 
@@ -67,15 +74,16 @@ object SpeedtestManager {
     }
     suspend fun testAllServersPing(servers: List<ProfileItem>) = Unit
 }
-KTEOF
-          fi
+'''
+              with open(path, "w") as f:
+                  f.write(minimal)
+              print("Minimal SpeedtestManager created")
 
-          echo "=== SpeedtestManager.kt status ==="
-          wc -l "$JAVA/handler/SpeedtestManager.kt"
+          print("File size:", os.path.getsize(path), "bytes")
+          PYEOF
 
       - name: Reset AndroidManifest
         run: |
-          MF="V2rayNG/app/src/main/AndroidManifest.xml"
           python3 << 'PYEOF'
           import re
           path = "V2rayNG/app/src/main/AndroidManifest.xml"
@@ -136,13 +144,13 @@ KTEOF
           if 'abiFilters' not in c:
               c = re.sub(r'(defaultConfig\s*\{)', r'\1\n        ndk { abiFilters.add(\"arm64-v8a\") }', c, count=1)
           open('$F', 'w').write(c)
-          print('ABI limited to arm64-v8a')
+          print('ABI limited')
           "
 
       - name: Run generate script
         run: python3 scripts/generate.py
 
-      - name: Run fixer (self-healing)
+      - name: Run fixer
         run: python3 scripts/fixer.py
         continue-on-error: true
 
@@ -159,7 +167,7 @@ KTEOF
       - name: Show errors if failed
         if: steps.build1.outcome == 'failure'
         run: |
-          echo "=== First build failed, showing errors ==="
+          echo "=== Build failed. Errors: ==="
           cd V2rayNG
           ./gradlew assembleFossDebug --stacktrace 2>&1 | grep -E "^e:|error:|FAILURE|What went wrong" | head -50 || true
 
@@ -172,7 +180,7 @@ KTEOF
       - name: List all APKs
         if: always()
         run: |
-          echo "=== APK files found ==="
+          echo "=== APK files ==="
           find V2rayNG/app/build/outputs/apk -name "*.apk" -type f -exec ls -lh {} \; || echo "No APK found"
 
       - name: Upload APK
