@@ -4324,7 +4324,7 @@ if "ProxySettingsActivity" not in content:
     new_acts2 += '\n        <activity android:name=".ui.home.ProxySettingsActivity" android:exported="false" />'
 
 if new_acts2:
-    content = content.replace("</application>",
+    content = content.replace("</application>", new_acts2 + "\n    </application>")
                                       content.replace("</application>", new_acts2 + "\n    </application>")
 
 with open(manifest_path, "w", encoding="utf-8") as f:
