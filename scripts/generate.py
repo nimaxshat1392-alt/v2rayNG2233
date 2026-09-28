@@ -4325,7 +4325,7 @@ if "ProxySettingsActivity" not in content:
 
 if new_acts2:
     content = content.replace("</application>", new_acts2 + "\n    </application>")
-                                      content.replace("</application>", new_acts2 + "\n    </application>")
+                                     
 
 with open(manifest_path, "w", encoding="utf-8") as f:
     f.write(content)
