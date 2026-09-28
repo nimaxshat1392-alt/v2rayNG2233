@@ -22,22 +22,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cleanup old files
-        run: |
-          JAVA="V2rayNG/app/src/main/java/com/v2ray/ang"
-          rm -rf "$JAVA/ui/home" "$JAVA/ui/admin" "$JAVA/ui/components" 2>/dev/null || true
-          rm -f "$JAVA/handler/ConfigUpdater.kt" 2>/dev/null || true
-          rm -f "$JAVA/ui/theme/VpnTheme.kt" 2>/dev/null || true
-          rm -f scripts/generate.py 2>/dev/null || true
-          echo "Cleanup done"
-
-      - name: Copy SpeedtestManager from scripts
-        run: |
-          mkdir -p V2rayNG/app/src/main/java/com/v2ray/ang/handler
-          cp scripts/SpeedtestManager.kt V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt
-          echo "SpeedtestManager.kt copied"
-          wc -l V2rayNG/app/src/main/java/com/v2ray/ang/handler/SpeedtestManager.kt
-
       - name: Download libv2ray AAR
         run: |
           mkdir -p V2rayNG/app/libs
@@ -62,14 +46,13 @@ jobs:
           open('$F', 'w').write(c)
           "
 
-      - name: Build APK
-        run: |
-          cd V2rayNG
-          ./gradlew assembleDebug --stacktrace
+      - name: Run self-healing build
+        run: python3 scripts/self_heal.py
 
       - name: List APKs
         if: always()
         run: |
+          echo "=== APK files ==="
           find V2rayNG/app/build/outputs/apk -name "*.apk" -type f -exec ls -lh {} \; || echo "no APK"
 
       - name: Upload APK
@@ -79,3 +62,4 @@ jobs:
           name: fast-vpn-apk
           path: V2rayNG/app/build/outputs/apk/**/*.apk
           if-no-files-found: warn
+          compression-level: 9
