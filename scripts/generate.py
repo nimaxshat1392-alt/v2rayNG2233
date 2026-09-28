@@ -8370,3 +8370,909 @@ fun XrayServerCard(
     print("  - ui/home/HomeActivity.kt (updated)")
     print("  - ui/home/CountryListActivity.kt (updated)")
     print("=" * 60)
+# ═══════════════════════════════════════════════════════
+# 52. XrayRealPing.kt - پینگ واقعی از طریق هسته Xray
+# ═══════════════════════════════════════════════════════
+w("handler/XrayRealPing.kt", r'''package com.v2ray.ang.handler
+
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.net.InetSocketAddress
+import java.net.Socket
+
+/**
+ * پینگ واقعی از طریق هسته Xray
+ *
+ * روش کار:
+ * ۱. یک Core موقت با کانفیگ سرور اجرا می‌شه
+ * ۲. Core روی پورت SOCKS محلی گوش می‌ده
+ * ۳. یک درخواست از طریق SOCKS به یک هدف (مثل google.com) فرستاده می‌شه
+ * ۴. زمان پاسخ اندازه‌گیری می‌شه
+ * ۵. Core متوقف می‌شه
+ */
+object XrayRealPing {
+
+    private const val TAG = "XrayRealPing"
+
+    /**
+     * پینگ واقعی یک کانفیگ از طریق هسته Xray
+     * @param config کانفیگ سرور
+     * @param testHost هاست هدف (پیش‌فرض: cloudflare.com)
+     * @param testPort پورت هدف (پیش‌فرض: 443)
+     * @return میلی‌ثانیه یا -1L در صورت خطا
+     */
+    suspend fun pingConfig(
+        config: ParsedConfig,
+        testHost: String = "1.1.1.1",
+        testPort: Int = 443
+    ): Long = withContext(Dispatchers.IO) {
+        try {
+            val startTime = System.currentTimeMillis()
+
+            // ۱. ساخت کانفیگ Xray با یک SOCKS محلی
+            val socksPort = 11080 + (config.name.hashCode() % 100)
+            val xrayJson = XrayConfigBuilder.build(config, socksPort)
+
+            // ۲. اجرای Core موقت
+            val coreController = Libv2ray.newCoreController(NoOpCallbackHandler)
+            coreController.startLoop(xrayJson, 0)
+
+            // ۳. صبر کوتاه برای راه‌اندازی Core
+            Thread.sleep(1500)
+
+            // ۴. تست اتصال از طریق SOCKS
+            val ping = testThroughSocks(testHost, testPort, socksPort)
+
+            // ۵. توقف Core
+            coreController.stopLoop()
+
+            if (ping < 0) -1L
+            else System.currentTimeMillis() - startTime
+        } catch (e: Exception) {
+            Log.e(TAG, "Xray ping failed for ${config.name}", e)
+            -1L
+        }
+    }
+
+    /**
+     * ارسال درخواست از طریق SOCKS proxy
+     */
+    private fun testThroughSocks(
+        targetHost: String,
+        targetPort: Int,
+        socksPort: Int,
+        timeout: Int = 8000
+    ): Long {
+        return try {
+            val start = System.currentTimeMillis()
+
+            // اتصال به SOCKS proxy محلی
+            val socksSocket = Socket()
+            socksSocket.connect(InetSocketAddress("127.0.0.1", socksPort), timeout)
+
+            val out = socksSocket.getOutputStream()
+            val input = socksSocket.getInputStream()
+
+            // SOCKS5 Handshake
+            out.write(byteArrayOf(0x05, 0x01, 0x00))
+            out.flush()
+
+            val response = ByteArray(2)
+            if (input.read(response) != 2 || response[0] != 0x05.toByte()) {
+                socksSocket.close()
+                return -1L
+            }
+
+            // SOCKS5 Connect Request
+            val hostBytes = targetHost.toByteArray()
+            val request = ByteArray(7 + hostBytes.size)
+            request[0] = 0x05
+            request[1] = 0x01
+            request[2] = 0x00
+            request[3] = 0x03
+            request[4] = hostBytes.size.toByte()
+            System.arraycopy(hostBytes, 0, request, 5, hostBytes.size)
+            request[5 + hostBytes.size] = (targetPort shr 8).toByte()
+            request[6 + hostBytes.size] = (targetPort and 0xFF).toByte()
+
+            out.write(request)
+            out.flush()
+
+            // خواندن پاسخ
+            val respHeader = ByteArray(4)
+            if (input.read(respHeader) != 4) {
+                socksSocket.close()
+                return -1L
+            }
+
+            if (respHeader[1] != 0x00.toByte()) {
+                socksSocket.close()
+                return -1L
+            }
+
+            // Skip Bind Address
+            when (respHeader[3]) {
+                0x01.toByte() -> input.read(ByteArray(4 + 2))
+                0x03.toByte() -> {
+                    val len = input.read()
+                    input.read(ByteArray(len + 2))
+                }
+                0x04.toByte() -> input.read(ByteArray(16 + 2))
+            }
+
+            val elapsed = System.currentTimeMillis() - start
+            socksSocket.close()
+            elapsed
+        } catch (e: Exception) {
+            -1L
+        }
+    }
+
+    /**
+     * No-op callback handler
+     */
+    private object NoOpCallbackHandler : CoreCallbackHandler {
+        override fun startup(): Int = 0
+        override fun shutdown(): Int = 0
+        override fun onEmitStatus(code: Int, message: String?): Int = 0
+    }
+
+    /**
+     * پینگ همه کانفیگ‌ها یکی‌یکی
+     */
+    suspend fun pingAll(
+        configs: List<ParsedConfig>,
+        onResult: (ParsedConfig, Long) -> Unit
+    ) {
+        for (config in configs) {
+            val ping = pingConfig(config)
+            onResult(config, ping)
+        }
+    }
+
+    fun color(ping: Long): Long = when {
+        ping < 0 -> 0xFF6B7280
+        ping < 150 -> 0xFF10B981
+        ping < 300 -> 0xFF3B82F6
+        ping < 600 -> 0xFFF59E0B
+        else -> 0xFFEF4444
+    }
+
+    fun format(ping: Long): String = when {
+        ping < 0 -> "Failed"
+        else -> "$ping ms"
+    }
+}
+''')
+
+# ═══════════════════════════════════════════════════════
+# 53. Update CountryListActivity to use XrayRealPing
+# ═══════════════════════════════════════════════════════
+w("ui/home/CountryListActivity.kt", r'''package com.v2ray.ang.ui.home
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Rocket
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.v2ray.ang.handler.ConfigStore
+import com.v2ray.ang.handler.ParsedConfig
+import com.v2ray.ang.handler.XrayRealPing
+import kotlinx.coroutines.launch
+
+data class XrayServerRow(
+    val config: ParsedConfig,
+    var ping: Long = -1L,
+    var isPinging: Boolean = false
+)
+
+class CountryListActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { MaterialTheme { XrayCountryListScreen() } }
+    }
+}
+
+@Composable
+fun XrayCountryListScreen() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var servers by remember { mutableStateOf<List<XrayServerRow>>(emptyList()) }
+    var query by remember { mutableStateOf("") }
+    var isPingingAll by remember { mutableStateOf(false) }
+    var pingIndex by remember { mutableStateOf(-1) }
+    var sortMode by remember { mutableStateOf("ping") }
+    var selectedLink by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        val configs = ConfigStore.loadAll(context)
+        servers = configs.map { XrayServerRow(it) }
+    }
+
+    val displayed = servers
+        .filter {
+            it.config.name.contains(query, ignoreCase = true) ||
+            it.config.host.contains(query, ignoreCase = true)
+        }
+        .let { list ->
+            if (sortMode == "ping")
+                list.sortedBy { if (it.ping < 0) Long.MAX_VALUE else it.ping }
+            else
+                list.sortedBy { it.config.name.lowercase() }
+        }
+
+    val bg = Brush.verticalGradient(listOf(Color(0xFF0A0E1A), Color(0xFF020617)))
+
+    Box(Modifier.fillMaxSize().background(bg)) {
+        Column(Modifier.fillMaxSize()) {
+            // Header
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton({ finish() }) {
+                    Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                }
+                Text(
+                    "Servers (${servers.size})",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton({
+                    if (!isPingingAll && servers.isNotEmpty()) {
+                        isPingingAll = true
+                        scope.launch {
+                            for (i in servers.indices) {
+                                pingIndex = i
+                                servers = servers.mapIndexed { idx, row ->
+                                    if (idx == i) row.copy(isPinging = true) else row
+                                }
+
+                                val ping = XrayRealPing.pingConfig(servers[i].config)
+
+                                servers = servers.mapIndexed { idx, row ->
+                                    if (idx == i) row.copy(ping = ping, isPinging = false)
+                                    else row
+                                }
+                            }
+                            isPingingAll = false
+                            pingIndex = -1
+                        }
+                    }
+                }) {
+                    if (isPingingAll) {
+                        CircularProgressIndicator(
+                            Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Color(0xFF10B981)
+                        )
+                    } else {
+                        Icon(Icons.Default.Refresh, "Test All", tint = Color.White)
+                    }
+                }
+            }
+
+            // Info banner
+            Card(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF3B82F6).copy(alpha = 0.15f)
+                )
+            ) {
+                Text(
+                    "Real ping via Xray core. Testing each server through actual proxy handshake.",
+                    Modifier.padding(12.dp),
+                    color = Color(0xFF9CA3AF),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Search
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                placeholder = { Text("Search servers...", color = Color(0xFF6B7280)) },
+                leadingIcon = { Icon(Icons.Default.Search, null, tint = Color(0xFF9CA3AF)) },
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // Sort buttons
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    onClick = { sortMode = "ping" },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (sortMode == "ping") Color(0xFF10B981) else Color(0xFF151A28)
+                ) {
+                    Text(
+                        "By Ping",
+                        Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        color = if (sortMode == "ping") Color.Black else Color.White,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Surface(
+                    onClick = { sortMode = "name" },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (sortMode == "name") Color(0xFF10B981) else Color(0xFF151A28)
+                ) {
+                    Text(
+                        "By Name",
+                        Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        color = if (sortMode == "name") Color.Black else Color.White,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            if (servers.isEmpty()) {
+                Box(
+                    Modifier.fillMaxSize().padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.Rocket, null,
+                            Modifier.size(64.dp), tint = Color(0xFF374151)
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "No servers found",
+                            color = Color(0xFF9CA3AF),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Tap Admin Panel to fetch configs",
+                            color = Color(0xFF6B7280),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(displayed) { row ->
+                        XrayServerCard(
+                            row = row,
+                            isSelected = row.config.rawLink == selectedLink
+                        ) {
+                            selectedLink = row.config.rawLink
+                        }
+                    }
+                    item { Spacer(Modifier.height(16.dp)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun XrayServerCard(
+    row: XrayServerRow,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected)
+                Color(0xFF10B981).copy(alpha = 0.15f)
+            else Color(0xFF151A28)
+        )
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                Modifier.size(26.dp),
+                shape = CircleShape,
+                color = if (isSelected) Color(0xFF10B981) else Color.Transparent,
+                border = androidx.compose.foundation.BorderStroke(
+                    2.dp,
+                    if (isSelected) Color(0xFF10B981) else Color(0xFF4B5563)
+                )
+            ) {
+                if (isSelected) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Check, null,
+                            Modifier.size(14.dp), tint = Color.Black)
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(Modifier.weight(1f)) {
+                Text(
+                    row.config.name,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "${row.config.host}:${row.config.port}",
+                    color = Color(0xFF9CA3AF),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    row.config.protocol.uppercase(),
+                    color = Color(0xFF6B7280),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+
+            if (row.isPinging) {
+                CircularProgressIndicator(
+                    Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = Color(0xFFF59E0B)
+                )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.SignalCellularAlt,
+                        null,
+                        Modifier.size(14.dp),
+                        tint = Color(XrayRealPing.color(row.ping))
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        XrayRealPing.format(row.ping),
+                        color = Color(XrayRealPing.color(row.ping)),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+''')
+
+print("=" * 60)
+print("PART 17 DONE - REAL XRAY PING!")
+print("Files:")
+print("  - handler/XrayRealPing.kt (Xray-based ping)")
+print("  - ui/home/CountryListActivity.kt (uses Xray ping)")
+print("=" * 60)
+# ═══════════════════════════════════════════════════════
+# 54. XrayVpnService - Real libv2ray connection
+# ═══════════════════════════════════════════════════════
+w("service/XrayVpnService.kt", r'''package com.v2ray.ang.service
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.net.VpnService
+import android.os.Build
+import android.os.ParcelFileDescriptor
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.v2ray.ang.handler.ConfigStore
+import com.v2ray.ang.handler.XrayConfigBuilder
+import com.v2ray.ang.ui.home.HomeActivity
+import libv2ray.CoreCallbackHandler
+import libv2ray.CoreController
+import libv2ray.Libv2ray
+import java.io.File
+
+class XrayVpnService : VpnService(), CoreCallbackHandler {
+
+    companion object {
+        const val ACTION_CONNECT = "com.fastvpn.xray.CONNECT"
+        const val ACTION_DISCONNECT = "com.fastvpn.xray.DISCONNECT"
+        private const val CHANNEL_ID = "fast_vpn_xray"
+        private const val NOTIFICATION_ID = 10003
+        private const val TAG = "XrayVpnService"
+
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+    }
+
+    private var vpnInterface: ParcelFileDescriptor? = null
+    private var coreController: CoreController? = null
+    private var serverName = "Auto"
+    private var coreInitialized = false
+
+    override fun onCreate() {
+        super.onCreate()
+        createChannel()
+        setupCoreEnv()
+    }
+
+    private fun setupCoreEnv() {
+        try {
+            val assetsDir = File(filesDir, "assets")
+            if (!assetsDir.exists()) assetsDir.mkdirs()
+            Libv2ray.initCoreEnv(assetsDir.absolutePath, "")
+            coreInitialized = true
+            Log.d(TAG, "Core env initialized")
+        } catch (e: Exception) {
+            Log.e(TAG, "Core init failed", e)
+            coreInitialized = false
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_CONNECT -> {
+                serverName = intent.getStringExtra("server") ?: "Auto"
+                startVpn()
+            }
+            ACTION_DISCONNECT -> stopVpn()
+        }
+        return START_STICKY
+    }
+
+    private fun startVpn() {
+        try {
+            stopVpn()
+            if (!coreInitialized) setupCoreEnv()
+            if (!coreInitialized) return
+
+            val builder = Builder()
+                .setSession("Fast VPN")
+                .setMtu(1500)
+                .addAddress("10.10.10.1", 32)
+                .addRoute("0.0.0.0", 0)
+                .addDnsServer("1.1.1.1")
+                .addDnsServer("8.8.8.8")
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                builder.setMetered(false)
+            }
+
+            try {
+                builder.addDisallowedApplication(packageName)
+            } catch (e: Exception) { }
+
+            vpnInterface = builder.establish()
+            if (vpnInterface == null) return
+
+            val tunFd = vpnInterface!!.fd
+            val configs = ConfigStore.loadAll(this)
+            if (configs.isEmpty()) {
+                vpnInterface?.close()
+                vpnInterface = null
+                return
+            }
+
+            val config = configs.first()
+            val xrayJson = XrayConfigBuilder.build(config)
+
+            coreController = Libv2ray.newCoreController(this)
+            coreController?.startLoop(xrayJson, tunFd)
+
+            isRunning = true
+            startForeground(NOTIFICATION_ID, buildNotification())
+            Log.d(TAG, "VPN started with ${config.name}")
+        } catch (e: Exception) {
+            Log.e(TAG, "VPN start failed", e)
+            isRunning = false
+            stopVpn()
+        }
+    }
+
+    private fun stopVpn() {
+        try {
+            isRunning = false
+            try { coreController?.stopLoop() } catch (e: Exception) { }
+            coreController = null
+            try { vpnInterface?.close() } catch (e: Exception) { }
+            vpnInterface = null
+            try { stopForeground(true) } catch (e: Exception) { }
+        } catch (e: Exception) { }
+    }
+
+    override fun startup(): Int {
+        Log.d(TAG, "Core started")
+        return 0
+    }
+
+    override fun shutdown(): Int {
+        Log.d(TAG, "Core shutdown")
+        return 0
+    }
+
+    override fun onEmitStatus(code: Int, message: String?): Int {
+        Log.d(TAG, "Core status [$code]: $message")
+        return 0
+    }
+
+    private fun createChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID, "Fast VPN", NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "VPN status"
+                setShowBadge(false)
+            }
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(channel)
+        }
+    }
+
+    private fun buildNotification(): Notification {
+        val intent = Intent(this, HomeActivity::class.java)
+        val pi = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_vpn_ic)
+            .setContentTitle("Fast VPN")
+            .setContentText("Connected: $serverName")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+    }
+
+    override fun onDestroy() {
+        stopVpn()
+        super.onDestroy()
+    }
+}
+''')
+
+print("=" * 60)
+print("PART 18A DONE - XrayVpnService")
+print("=" * 60)
+# ═══════════════════════════════════════════════════════
+# 55. XrayConfigBuilder - tun-ready config
+# ═══════════════════════════════════════════════════════
+w("handler/XrayConfigBuilder.kt", r'''package com.v2ray.ang.handler
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+object XrayConfigBuilder {
+
+    fun build(parsed: ParsedConfig): String {
+        return try {
+            val root = JSONObject()
+
+            root.put("log", JSONObject().apply {
+                put("loglevel", "warning")
+            })
+
+            root.put("inbounds", JSONArray())
+
+            val outbounds = JSONArray()
+            when (parsed.protocol) {
+                "vless" -> outbounds.put(buildVless(parsed))
+                "vmess" -> outbounds.put(buildVmess(parsed))
+                "trojan" -> outbounds.put(buildTrojan(parsed))
+                "shadowsocks" -> outbounds.put(buildSS(parsed))
+                else -> outbounds.put(buildVless(parsed))
+            }
+
+            outbounds.put(JSONObject().apply {
+                put("tag", "direct")
+                put("protocol", "freedom")
+            })
+
+            outbounds.put(JSONObject().apply {
+                put("tag", "block")
+                put("protocol", "blackhole")
+            })
+
+            root.put("outbounds", outbounds)
+
+            root.put("routing", JSONObject().apply {
+                put("domainStrategy", "IPIfNonMatch")
+                put("rules", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("type", "field")
+                        put("outboundTag", "direct")
+                        put("domain", JSONArray().apply {
+                            put("geosite:category-ir")
+                            put("domain:.ir")
+                        })
+                    })
+                    put(JSONObject().apply {
+                        put("type", "field")
+                        put("outboundTag", "direct")
+                        put("ip", JSONArray().apply {
+                            put("geoip:private")
+                            put("geoip:ir")
+                        })
+                    })
+                })
+            })
+
+            root.toString(2)
+        } catch (e: Exception) {
+            "{}"
+        }
+    }
+
+    private fun buildVless(p: ParsedConfig) = JSONObject().apply {
+        put("tag", "proxy")
+        put("protocol", "vless")
+        put("settings", JSONObject().apply {
+            put("vnext", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("address", p.host)
+                    put("port", p.port)
+                    put("users", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("id", p.uuid)
+                            put("encryption", "none")
+                            if (p.flow.isNotEmpty()) put("flow", p.flow)
+                        })
+                    })
+                })
+            })
+        })
+        put("streamSettings", stream(p))
+    }
+
+    private fun buildVmess(p: ParsedConfig) = JSONObject().apply {
+        put("tag", "proxy")
+        put("protocol", "vmess")
+        put("settings", JSONObject().apply {
+            put("vnext", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("address", p.host)
+                    put("port", p.port)
+                    put("users", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("id", p.uuid)
+                            put("alterId", 0)
+                            put("security", "auto")
+                        })
+                    })
+                })
+            })
+        })
+        put("streamSettings", stream(p))
+    }
+
+    private fun buildTrojan(p: ParsedConfig) = JSONObject().apply {
+        put("tag", "proxy")
+        put("protocol", "trojan")
+        put("settings", JSONObject().apply {
+            put("servers", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("address", p.host)
+                    put("port", p.port)
+                    put("password", p.uuid)
+                })
+            })
+        })
+        put("streamSettings", stream(p))
+    }
+
+    private fun buildSS(p: ParsedConfig) = JSONObject().apply {
+        put("tag", "proxy")
+        put("protocol", "shadowsocks")
+        put("settings", JSONObject().apply {
+            put("servers", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("address", p.host)
+                    put("port", p.port)
+                    put("method", "aes-128-gcm")
+                    put("password", p.uuid)
+                })
+            })
+        })
+    }
+
+    private fun stream(p: ParsedConfig) = JSONObject().apply {
+        put("network", p.network.ifEmpty { "tcp" })
+
+        when (p.security) {
+            "tls" -> {
+                put("security", "tls")
+                put("tlsSettings", JSONObject().apply {
+                    put("serverName", p.sni)
+                    put("allowInsecure", false)
+                    if (p.fingerprint.isNotEmpty()) put("fingerprint", p.fingerprint)
+                })
+            }
+            "reality" -> {
+                put("security", "reality")
+                put("realitySettings", JSONObject().apply {
+                    put("serverName", p.sni)
+                    put("fingerprint", p.fingerprint.ifEmpty { "chrome" })
+                    put("publicKey", p.publicKey)
+                    put("shortId", p.shortId)
+                    put("spiderX", "/")
+                })
+            }
+        }
+
+        when (p.network) {
+            "ws" -> put("wsSettings", JSONObject().apply {
+                put("path", p.path.ifEmpty { "/" })
+                if (p.sni.isNotEmpty()) put("headers", JSONObject().apply {
+                    put("Host", p.sni)
+                })
+            })
+            "tcp" -> put("tcpSettings", JSONObject().apply {
+                put("header", JSONObject().apply { put("type", "none") })
+            })
+            "grpc" -> put("grpcSettings", JSONObject().apply {
+                put("serviceName", p.path.ifEmpty { "" })
+            })
+        }
+    }
+}
+''')
+
+print("=" * 60)
+print("PART 18B DONE - XrayConfigBuilder")
+print("=" * 60)
+print()
+print("Now VPN uses real libv2ray connection!")
+print("=" * 60)
