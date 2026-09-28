@@ -22,6 +22,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Fix generate.py
+        run: python3 scripts/fix_generate.py
+        continue-on-error: true
+
       - name: Download libv2ray AAR
         run: |
           mkdir -p V2rayNG/app/libs
@@ -51,9 +55,7 @@ jobs:
 
       - name: List APKs
         if: always()
-        run: |
-          echo "=== APK files ==="
-          find V2rayNG/app/build/outputs/apk -name "*.apk" -type f -exec ls -lh {} \; || echo "no APK"
+        run: find V2rayNG/app/build/outputs/apk -name "*.apk" -type f -exec ls -lh {} \; || echo "no APK"
 
       - name: Upload APK
         if: always()
@@ -62,4 +64,3 @@ jobs:
           name: fast-vpn-apk
           path: V2rayNG/app/build/outputs/apk/**/*.apk
           if-no-files-found: warn
-          compression-level: 9
