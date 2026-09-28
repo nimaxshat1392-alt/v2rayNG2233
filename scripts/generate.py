@@ -8051,7 +8051,6 @@ fun XrayHomeScreen() {
         # 54. Update CountryListActivity to use RealPingTest
         # ═══════════════════════════════════════════════════════
         w("ui/home/CountryListActivity.kt", r'''package com.v2ray.ang.ui.home
-
         import android.os.Bundle
         import androidx.activity.ComponentActivity
         import androidx.activity.compose.setContent
@@ -8751,7 +8750,7 @@ fun XrayCountryListScreen() {
                 }
                 Surface(
                     onClick = { sortMode = "name" },
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(20.dp)
                     color = if (sortMode == "name") Color(0xFF10B981) else Color(0xFF151A28)
                 ) {
                     Text(
