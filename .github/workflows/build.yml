@@ -35,21 +35,46 @@ jobs:
             sed -i 's|dependencies {|dependencies {\n    implementation("androidx.compose.material:material-icons-extended")\n    implementation("androidx.compose.animation:animation:1.7.6")|' "$F"
           fi
 
+      - name: Limit to arm64-v8a only
+        run: |
+          F="V2rayNG/app/build.gradle.kts"
+          python3 -c "
+          import re
+          c = open('$F').read()
+          if 'abiFilters' not in c:
+              c = re.sub(r'(defaultConfig\s*\{)', r'\1\n        ndk { abiFilters.add(\"arm64-v8a\") }', c, count=1)
+          c = re.sub(r'include\(\"arm64-v8a\",\s*\"armeabi-v7a\",\s*\"x86\",\s*\"x86_64\"\)', 'include(\"arm64-v8a\")', c)
+          c = re.sub(r'include\(\"arm64-v8a\",\s*\"armeabi-v7a\"\)', 'include(\"arm64-v8a\")', c)
+          open('$F', 'w').write(c)
+          print('ABI limited')
+          "
+
       - name: Run ultimate fix
         run: python3 scripts/ultimate_fix.py
         continue-on-error: true
 
-      - name: List APKs
+      - name: Build foss arm64 APK
+        run: |
+          cd V2rayNG
+          ./gradlew assembleFossDebug --stacktrace
+        continue-on-error: true
+
+      - name: Clean other APKs
         if: always()
         run: |
-          echo "=== APK files ==="
-          find V2rayNG/app/build/outputs/apk -name "*.apk" -type f -exec ls -lh {} \; || echo "no APK"
+          find V2rayNG/app/build/outputs/apk -name "*.apk" | while read f; do
+            if [[ "$f" != *"foss"* ]] || [[ "$f" != *"arm64"* ]]; then
+              rm -f "$f"
+            fi
+          done
+          echo "=== Remaining APKs ==="
+          find V2rayNG/app/build/outputs/apk -name "*.apk" -exec ls -lh {} \; || echo "none"
 
       - name: Upload APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fast-vpn-apk
-          path: V2rayNG/app/build/outputs/apk/**/*.apk
+          path: V2rayNG/app/build/outputs/apk/**/*arm64*.apk
           if-no-files-found: warn
           compression-level: 9
