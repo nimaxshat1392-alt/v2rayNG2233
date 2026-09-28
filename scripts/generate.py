@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 
 BASE = "V2rayNG/app/src/main"
 JAVA = f"{BASE}/java/com/v2ray/ang"
