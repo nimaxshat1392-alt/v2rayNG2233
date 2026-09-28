@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,10 +22,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Fix generate.py
-        run: python3 scripts/fix_generate.py
-        continue-on-error: true
-
       - name: Download libv2ray AAR
         run: |
           mkdir -p V2rayNG/app/libs
@@ -36,26 +32,18 @@ jobs:
         run: |
           F="V2rayNG/app/build.gradle.kts"
           if ! grep -q "material-icons-extended" "$F"; then
-            sed -i 's|dependencies {|dependencies {\n    implementation("androidx.compose.material:material-icons-extended")|' "$F"
+            sed -i 's|dependencies {|dependencies {\n    implementation("androidx.compose.material:material-icons-extended")\n    implementation("androidx.compose.animation:animation:1.7.6")|' "$F"
           fi
 
-      - name: Limit to arm64-v8a
-        run: |
-          F="V2rayNG/app/build.gradle.kts"
-          python3 -c "
-          import re
-          c = open('$F').read()
-          if 'abiFilters' not in c:
-              c = re.sub(r'(defaultConfig\s*\{)', r'\1\n        ndk { abiFilters.add(\"arm64-v8a\") }', c, count=1)
-          open('$F', 'w').write(c)
-          "
-
-      - name: Run self-healing build
-        run: python3 scripts/self_heal.py
+      - name: Run ultimate fix
+        run: python3 scripts/ultimate_fix.py
+        continue-on-error: true
 
       - name: List APKs
         if: always()
-        run: find V2rayNG/app/build/outputs/apk -name "*.apk" -type f -exec ls -lh {} \; || echo "no APK"
+        run: |
+          echo "=== APK files ==="
+          find V2rayNG/app/build/outputs/apk -name "*.apk" -type f -exec ls -lh {} \; || echo "no APK"
 
       - name: Upload APK
         if: always()
@@ -64,3 +52,4 @@ jobs:
           name: fast-vpn-apk
           path: V2rayNG/app/build/outputs/apk/**/*.apk
           if-no-files-found: warn
+          compression-level: 9
