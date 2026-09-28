@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Auto-fix syntax errors in generate.py"""
 import re
 import subprocess
 import sys
@@ -11,7 +10,7 @@ def check():
                        capture_output=True, text=True)
     return r.returncode == 0, r.stderr
 
-def fix_line(line_num):
+def fix_line(line_num, err_text):
     with open(FILE, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
@@ -19,31 +18,32 @@ def fix_line(line_num):
     if idx < 0 or idx >= len(lines):
         return False
 
-    original = lines[idx]
-    s = original.rstrip("\n")
+    s = lines[idx].rstrip("\n")
+    print(f"Line {line_num}: {repr(s)}")
 
-    # خط خالی
-    if not s.strip():
-        return False
-
-    # اگر تعداد کوتیشن دوتایی فرد است، آخرش کوتیشن بسته نشده
-    if s.count('"') % 2 == 1:
-        # پیدا کن آخرین کاراکتر چی هست
-        if s.endswith('"'):
-            return False
-        # اضافه کردن ")" برای بستن
-        lines[idx] = s + '")' + "\n"
-        print(f"Fixed line {line_num}: added closing quote + paren")
+    # خطوطی که با content.replace("</application>", تمام می‌شن
+    if 'content.replace("</application>",' in s and s.endswith(","):
+        lines[idx] = '        content = content.replace("</application>", new_acts2 + "\\n    </application>")\n'
+        print(f"Fixed: closed replace paren")
         with open(FILE, "w", encoding="utf-8") as f:
             f.writelines(lines)
         return True
 
-    # اگر تعداد کوتیشن تکی فرد است
-    if s.count("'") % 2 == 1 and s.count('"') % 2 == 0:
-        if s.endswith("'"):
-            return False
-        lines[idx] = s + "')" + "\n"
-        print(f"Fixed line {line_num}: added closing quote + paren")
+    # اگه تعداد پرانتز باز بیشتر از بسته است
+    open_parens = s.count("(")
+    close_parens = s.count(")")
+    if open_parens > close_parens:
+        diff = open_parens - close_parens
+        lines[idx] = s + (")" * diff) + "\n"
+        print(f"Fixed: added {diff} closing parens")
+        with open(FILE, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+        return True
+
+    # اگه تعداد کوتیشن دوتایی فرد است
+    if s.count('"') % 2 == 1:
+        lines[idx] = s + '"\n'
+        print(f"Fixed: added closing quote")
         with open(FILE, "w", encoding="utf-8") as f:
             f.writelines(lines)
         return True
@@ -51,29 +51,26 @@ def fix_line(line_num):
     return False
 
 def main():
-    max_iter = 200
-    for i in range(max_iter):
+    for i in range(50):
         ok, err = check()
         if ok:
-            print(f"✅ File compiles successfully after {i} fixes")
+            print(f"✅ Compiles after {i} fixes")
             return 0
 
         m = re.search(r'line (\d+)', err)
         if not m:
-            print("❌ Cannot parse error")
+            print("Cannot find line number")
             print(err[:500])
             return 1
 
         line_num = int(m.group(1))
-        print(f"Fix #{i+1}: syntax error at line {line_num}")
+        print(f"Fix #{i+1}: line {line_num}")
 
-        if not fix_line(line_num):
-            print(f"❌ Cannot auto-fix line {line_num}")
-            print("Error:")
-            print(err[:500])
+        if not fix_line(line_num, err):
+            print(f"❌ Cannot fix line {line_num}")
+            print(err[:300])
             return 1
 
-    print("❌ Max iterations reached")
     return 1
 
 if __name__ == "__main__":
