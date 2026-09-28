@@ -5718,4 +5718,4 @@ with open(manifest_path, "w", encoding="utf-8") as f:
 print("=" * 60)
 print("VISUAL POLISH ADDED!")
 print("  - SplashActivity (animated splash screen)")
-print("  - ConnectionProgressRing (circular pro
+print("  - ConnectionProgressRing (circular progress)")
